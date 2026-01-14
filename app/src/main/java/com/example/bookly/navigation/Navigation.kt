@@ -5,9 +5,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.bookly.ui.screens.LoginScreen
+import com.example.bookly.ui.screens.RegisterScreen
 import com.example.bookly.ui.screens.WelcomeScreen
 
-object Routes{
+object Routes {
     const val WELCOME = "welcome"
     const val LOGIN = "login"
     const val REGISTER = "register"
@@ -15,34 +16,52 @@ object Routes{
 }
 
 @Composable
-fun BooklyNavigation (){
+fun BookishNavigation() {
     val navController = rememberNavController()
 
     NavHost(
         navController = navController,
         startDestination = Routes.WELCOME
-    ){
-        composable(Routes.WELCOME){
+    ) {
+        composable(Routes.WELCOME) {
             WelcomeScreen(
                 onStartReading = {
                     navController.navigate(Routes.LOGIN)
                 }
             )
         }
-        composable(Routes.LOGIN){
+        composable(Routes.LOGIN) {
             LoginScreen(
                 onLoginSuccess = {
                     //TODO: catre Home
                     println("Login successful!")
                 },
                 onNavigateToSignUp = {
-                    //TODO: catre Register
-                    println("Navigate to Sign Up")
+                       navController.navigate(Routes.REGISTER)
+                   },
+                onBackPressed = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Routes.REGISTER) {
+            RegisterScreen(
+                onRegisterSuccess = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.REGISTER) {
+                            inclusive = true
+                        }
+                    }
+                },
+                onNavigateToLogin = {
+                    navController.popBackStack()
                 },
                 onBackPressed = {
                     navController.popBackStack()
                 }
             )
         }
+
     }
 }
