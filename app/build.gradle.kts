@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.bookly"
+    namespace = "com.example.bookish"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.bookly"
+        applicationId = "com.example.bookish"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -68,6 +68,9 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth")
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.01.00"))

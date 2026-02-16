@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "269406197112",
+    "project_id": "bookly-fbb62",
+    "storage_bucket": "bookly-fbb62.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:269406197112:android:5aa85a16879c19d541a48d",
+        "android_client_info": {
+          "package_name": "AndroidManifest.xml"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "269406197112-4fbpqe5sef8m4aj7lo9kc13n1d12pl5e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDZAWXvqraAWTz6J2pXVUhmERkzU_eaHs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "269406197112-4fbpqe5sef8m4aj7lo9kc13n1d12pl5e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:269406197112:android:2a0c0b8fdd72e48041a48d",
+        "android_client_info": {
+          "package_name": "com.example.bookish"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "269406197112-4fbpqe5sef8m4aj7lo9kc13n1d12pl5e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDZAWXvqraAWTz6J2pXVUhmERkzU_eaHs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "269406197112-4fbpqe5sef8m4aj7lo9kc13n1d12pl5e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-package com.example.bookly.ui.screens
+package com.example.bookish.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,8 +53,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.bookly.viewmodel.AuthState
-import com.example.bookly.viewmodel.AuthViewModel
+import com.example.bookish.viewmodel.AuthState
+import com.example.bookish.viewmodel.AuthViewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)

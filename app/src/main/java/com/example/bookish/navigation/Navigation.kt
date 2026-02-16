@@ -1,12 +1,12 @@
-package com.example.bookly.navigation
+package com.example.bookish.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.bookly.ui.screens.LoginScreen
-import com.example.bookly.ui.screens.RegisterScreen
-import com.example.bookly.ui.screens.WelcomeScreen
+import com.example.bookish.ui.screens.LoginScreen
+import com.example.bookish.ui.screens.RegisterScreen
+import com.example.bookish.ui.screens.WelcomeScreen
 
 object Routes {
     const val WELCOME = "welcome"

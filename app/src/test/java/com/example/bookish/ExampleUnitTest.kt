@@ -1,4 +1,4 @@
-package com.example.bookly
+package com.example.bookish
 
 import org.junit.Test
 

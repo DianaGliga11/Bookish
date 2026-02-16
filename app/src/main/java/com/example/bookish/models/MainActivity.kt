@@ -1,4 +1,4 @@
-package com.example.bookly
+package com.example.bookish
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.bookly.navigation.BookishNavigation
-import com.example.bookly.ui.theme.BooklyTheme
+import com.example.bookish.navigation.BookishNavigation
+import com.example.bookish.ui.theme.BooklyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

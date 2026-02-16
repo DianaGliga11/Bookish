@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">Bookly</string>
+    <string name="app_name">Bookish</string>
+    <string name="default_web_client_id">269406197112-4fbpqe5sef8m4aj7lo9kc13n1d12pl5e.apps.googleusercontent.com</string>
+
 </resources>

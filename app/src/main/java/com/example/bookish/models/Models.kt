@@ -1,4 +1,4 @@
-package com.example.bookly.models
+package com.example.bookish.models
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId

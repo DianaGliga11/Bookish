@@ -1,4 +1,4 @@
-package com.example.bookly.ui.screens
+package com.example.bookish.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

@@ -1,4 +1,4 @@
-package com.example.bookly.ui.theme
+package com.example.bookish.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme

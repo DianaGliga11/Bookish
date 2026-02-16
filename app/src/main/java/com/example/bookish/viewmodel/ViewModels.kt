@@ -1,10 +1,12 @@
-package com.example.bookly.viewmodel
+package com.example.bookish.viewmodel
 
-import android.net.Uri
+import android.content.ContentValues.TAG
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.bookly.models.*
-import com.example.bookly.repository.*
+import com.example.bookish.models.*
+import com.example.bookish.repository.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -71,5 +73,20 @@ class AuthViewModel : ViewModel() {
         _authState.value = AuthState.Idle
     }
 
+    fun getGoogleSignInClient(context: Context) = repository.getGoogleSignInClient(context)
+
+    fun signInWithGoogle(idToken: String){
+        viewModelScope.launch {
+            Log.d(TAG, "Google Sign In called from UI")
+            _authState.value = AuthState.Loading
+            val result = repository.signInWithGoogle(idToken)
+            _authState.value = if (result.isSuccess) {
+                AuthState.Success(result.getOrNull() ?: "")
+            }else{
+                Log.e(TAG, "Google Sign In FAILED: ${result.exceptionOrNull()?.message}")
+                AuthState.Error(result.exceptionOrNull()?.message ?: "Google Sign In failed")
+            }
+        }
+    }
     fun getCurrentUserId(): String? = repository.getCurrentUserId()
 }

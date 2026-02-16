@@ -1,14 +1,23 @@
-package com.example.bookly.repository
+package com.example.bookish.repository
 
+
+import com.example.bookish.R
+import android.content.ContentValues.TAG
+import android.content.Context
 import android.net.Uri
-import com.example.bookly.models.Book
-import com.example.bookly.models.Friendship
-import com.example.bookly.models.PrivateMessage
-import com.example.bookly.models.Review
-import com.example.bookly.models.Shelf
-import com.example.bookly.models.ShelfBook
-import com.example.bookly.models.User
+import android.util.Log
+import com.example.bookish.models.Book
+import com.example.bookish.models.Friendship
+import com.example.bookish.models.PrivateMessage
+import com.example.bookish.models.Review
+import com.example.bookish.models.Shelf
+import com.example.bookish.models.ShelfBook
+import com.example.bookish.models.User
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
@@ -48,6 +57,42 @@ class AuthRepository {
     }
 
     fun getCurrentUserId(): String? = auth.currentUser?.uid
+
+    fun getGoogleSignInClient(context: Context): GoogleSignInClient {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(context.getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+        return GoogleSignIn.getClient(context, gso)
+    }
+
+    suspend fun signInWithGoogle(idToken: String): Result<String> {
+        return try{
+            Log.d(TAG, "Starting Google Sign In token")
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val result = auth.signInWithCredential(credential).await()
+            val userId = result.user?.uid ?: throw Exception("User ID is null")
+
+            Log.d(TAG, "Google Sign In successful. User ID: $userId")
+            val userDoc = db.collection("users").document(userId).get().await()
+            if (!userDoc.exists()){
+                val user = User(
+                    id_user = userId,
+                    email = result.user?.email ?: "",
+                    username = result.user?.displayName ?: "User",
+                    profileImageUrl = result.user?.photoUrl.toString() ?: ""
+                )
+                db.collection("users").document(userId).set(user).await()
+                Log.d(TAG, "New Google user saved to Firestore")
+            }else{
+                Log.d(TAG, "Google user already logged in Firestore")
+            }
+            Result.success("Google Sign In successful")
+        }catch(e: Exception){
+            Log.e(TAG, "Google Sign In failed: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }
 
 class UserRepository {
