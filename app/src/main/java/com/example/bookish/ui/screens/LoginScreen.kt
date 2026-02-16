@@ -82,7 +82,6 @@ fun LoginScreen(
 
     val authState by viewModel.authState.collectAsState()
     val context = LocalContext.current
-    val viewModel: AuthViewModel = viewModel()
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -100,284 +99,292 @@ fun LoginScreen(
         }
     }
 
-        LaunchedEffect(authState) {
-            if (authState is AuthState.Success) {
-                onLoginSuccess()
-            }
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Success) {
+            Log.d("LoginScreen", "Login successful")
+            kotlinx.coroutines.delay(100)
+            onLoginSuccess()
         }
+        if (authState is AuthState.Error) {
+            Log.e("LoginScreen", "Login ERROR: ${(authState as AuthState.Error).message}")
+        } else {
+            Log.d("LoginScreen", "AuthState: $authState")
+        }
+    }
 
-        Box(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFFC0CB),
+                        Color.White
+                    ),
+                    startY = 0f,
+                    400f
+                )
+            )
+    ) {
+        IconButton(
+            onClick = onBackPressed,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.Black
+            )
+        }
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFFFC0CB),
-                            Color.White
-                        ),
-                        startY = 0f,
-                        400f
-                    )
-                )
+                .background(Color.White, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(
-                onClick = onBackPressed,
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.Black
-                )
-            }
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(style = SpanStyle(color = Color(0xFFFF69B4))) {
+                        append("Book")
+                    }
+                    withStyle(style = SpanStyle(color = Color.Black)) {
+                        append("ish")
+                    }
+                },
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Welcome back!",
+                fontSize = 16.sp,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.White, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = buildAnnotatedString {
-                        withStyle(style = SpanStyle(color = Color(0xFFFF69B4))) {
-                            append("Book")
-                        }
-                        withStyle(style = SpanStyle(color = Color.Black)) {
-                            append("ish")
-                        }
+                    text = "Username",
+                    fontSize = 14.sp,
+                    color = Color.Black,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Enter your username") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Person, contentDescription = null)
                     },
-                    fontSize = 40.sp,
-                    fontWeight = FontWeight.Bold
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFF69B4),
+                        unfocusedBorderColor = Color.LightGray
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Welcome back!",
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-
+                Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Username",
+                        text = "Email",
                         fontSize = 14.sp,
                         color = Color.Black,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
                     OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
+                        value = email,
+                        onValueChange = { email = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Enter your username") },
+                        placeholder = { Text("Enter your email") },
                         leadingIcon = {
-                            Icon(Icons.Default.Person, contentDescription = null)
+                            Icon(Icons.Default.Email, contentDescription = null)
                         },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFFFF69B4),
                             unfocusedBorderColor = Color.LightGray
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Email",
-                            fontSize = 14.sp,
-                            color = Color.Black,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Enter your email") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Email, contentDescription = null)
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFFFF69B4),
-                                unfocusedBorderColor = Color.LightGray
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Password",
-                            fontSize = 14.sp,
-                            color = Color.Black,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = password,
-                            onValueChange = { password = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Enter your password") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                                    )
-                                }
-                            },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFFFF69B4),
-                                unfocusedBorderColor = Color.LightGray
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text = "Forgot password?",
+                        text = "Password",
                         fontSize = 14.sp,
-                        color = Color(0xFFFF69B4),
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .clickable {/*TODO*/ }
+                        color = Color.Black,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            viewModel.login(email, password)
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter your password") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = null)
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF69B4),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFF69B4),
+                            unfocusedBorderColor = Color.LightGray
                         ),
-                        shape = RoundedCornerShape(28.dp),
-                        enabled = authState !is AuthState.Loading
-                    ) {
-                        if (authState is AuthState.Loading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else {
-                            Text(
-                                text = "Sign In",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                    if (authState is AuthState.Error) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = (authState as AuthState.Error).message,
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        text = "or",
-                        color = Color.Gray,
-                        fontSize = 14.sp
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Forgot password?",
+                    fontSize = 14.sp,
+                    color = Color(0xFFFF69B4),
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .clickable {/*TODO*/ }
+                )
 
-                    OutlinedButton(
-                        onClick = {
-                            val googleSignInClient = viewModel.getGoogleSignInClient(context)
-                            googleSignInLauncher.launch(googleSignInClient.signInIntent) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            AsyncImage(
-                                model = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg",
-                                contentDescription = "Google logo",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Continue with Google")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    OutlinedButton(
-                        onClick = {/*TODO*/ },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            AsyncImage(
-                                model = "https://www.facebook.com/images/fb_icon_325x325.png",
-                                contentDescription = "Facebook logo",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Continue with Facebook")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    OutlinedButton(
-                        onClick = {/*TODO*/ },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color.Black
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        viewModel.login(email, password)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF69B4),
+                    ),
+                    shape = RoundedCornerShape(28.dp),
+                    enabled = authState !is AuthState.Loading
+                ) {
+                    if (authState is AuthState.Loading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
+                    } else {
+                        Text(
+                            text = "Sign In",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                if (authState is AuthState.Error) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = (authState as AuthState.Error).message,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "or",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        val googleSignInClient = viewModel.getGoogleSignInClient(context)
+                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Don't have any account?",
-                                color = Color.Gray,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                text = " Sign Up",
-                                color = Color(0xFFFF69B4),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { onNavigateToSignUp() }
-                            )
-                        }
+                        AsyncImage(
+                            model = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg",
+                            contentDescription = "Google logo",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Continue with Google")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedButton(
+                    onClick = {/*TODO*/ },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        AsyncImage(
+                            model = "https://www.facebook.com/images/fb_icon_325x325.png",
+                            contentDescription = "Facebook logo",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Continue with Facebook")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedButton(
+                    onClick = {/*TODO*/ },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Don't have any account?",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = " Sign Up",
+                            color = Color(0xFFFF69B4),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { onNavigateToSignUp() }
+                        )
                     }
                 }
             }
         }
     }
+}
