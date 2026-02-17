@@ -163,18 +163,19 @@ fun BookishApp() {
             )
         }
 
-//        // Book Details Screen
-//        composable("book_details") {
-//            selectedBook?.let { book ->
-//                BookDetailsScreen(
-//                    book = book,
-//                    onBackClick = {
-//                        navController.popBackStack()
-//                    },
-//                    bookViewModel = bookViewModel
-//                )
-//            }
-//        }
+        // Book Details Screen
+        composable("book_details") {
+            selectedBook?.let { book ->
+                BookDetailsScreen(
+                    book = book,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    bookViewModel = bookViewModel,
+                    authViewModel = authViewModel
+                )
+            }
+        }
 
         // Search Screen
         composable("search") {

@@ -235,7 +235,7 @@ fun HomeHeader(
     ) {
         Column {
             Text(
-                text = "WelcomeBack, $username!",
+                text = "Welcome Back, $username!",
                 fontSize = 16.sp,
                 color = Color.Gray
             )

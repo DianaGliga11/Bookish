@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.bom)
+    implementation(libs.androidx.animation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
