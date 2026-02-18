@@ -43,6 +43,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -110,7 +112,7 @@ fun BookDetailsScreen(
 ) {
     val currentUserState by authViewModel.currentUser.collectAsState()
     val userShelves by authViewModel._userShalves.collectAsState()
-    val reviews by bookViewModel.reviews.collectAsState()
+    val reviews by bookViewModel.currentBookReviews.collectAsState()
     val comments by bookViewModel.comments.collectAsState()
     val authors by bookViewModel.authors.collectAsState()
     val genres by bookViewModel.genres.collectAsState()
@@ -212,7 +214,7 @@ fun BookDetailsScreen(
             ActionButtons(
                 isAddedToShelf = isAddedToShelf,
                 currentUser = currentUser,
-                wantToReadShelf = wantToReadShelf,
+                userShelves = userShelves,
                 book = book,
                 authViewModel = authViewModel,
                 bookViewModel = bookViewModel,
@@ -255,7 +257,7 @@ private fun ReviewsSection(
 ) {
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
         Text(
-            text = "Recenzii${if (reviews.isNotEmpty()) " (${reviews.size})" else ""}",
+            text = "Reviews${if (reviews.isNotEmpty()) " (${reviews.size})" else ""}",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
@@ -284,12 +286,12 @@ private fun ReviewsSection(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Nicio recenzie încă.",
+                        text = "No review yet",
                         color = TextSecondary,
                         fontSize = 14.sp
                     )
                     Text(
-                        text = "Fii primul care recenzează!",
+                        text = "Be the fist review",
                         color = Pink,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
@@ -317,7 +319,7 @@ private fun ReviewsSection(
 private fun ActionButtons(
     isAddedToShelf: Boolean,
     currentUser: User?,
-    wantToReadShelf: Shelf?,
+    userShelves: List<Shelf>,
     book: Book,
     authViewModel: AuthViewModel,
     bookViewModel: BookViewModel,
@@ -325,59 +327,99 @@ private fun ActionButtons(
     onWriteReview: () -> Unit,
     onError: (String) -> Unit
 ) {
+    var showShelfMenu by remember { mutableStateOf(false) }
+    var currentShelfId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isAddedToShelf, userShelves) {
+        if (isAddedToShelf && userShelves.isNotEmpty()) {
+            currentShelfId =
+                bookViewModel.getShelfForBook(book.id_book, userShelves.map { it.id_shelf })
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ── Want to Read ────────────────────────────────────────────────
-        Button(
-            onClick = {
-                if (currentUser == null) {
-                    onError("You have to be authenticated!")
-                    return@Button
-                }
-                if (isAddedToShelf) return@Button
+        Box {
+            // ── Want to Read ────────────────────────────────────────────────
+            Button(
+                onClick = {
+                    if (currentUser == null) {
+                        onError("You have to be authenticated!")
+                        return@Button
+                    }
+                    if (isAddedToShelf)
+                        showShelfMenu = true
+                    else {
+                        val defaultShelf = userShelves.find { it.name == "Want to Read" }
+                        if (defaultShelf != null) {
+                            bookViewModel.addBookToShelf(
+                                currentUser.id_user,
+                                defaultShelf.id_shelf,
+                                book.id_book
+                            )
+                            onShelfAdded()
+                        } else {
+                            authViewModel.createShelf("Want to Read")
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isAddedToShelf) Color(0xFF4CAF50) else Pink
+                ),
+                shape = RoundedCornerShape(16.dp),
+                elevation = ButtonDefaults.buttonElevation(6.dp)
+            ) {
+                Icon(
+                    imageVector = if (isAddedToShelf) Icons.Default.BookmarkAdded else Icons.Default.BookmarkAdd,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isAddedToShelf) "Added in library ✓" else "Add to Want to Read",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+            }
 
-                if (wantToReadShelf != null) {
-                    // Raftul există → adaugă direct
-                    bookViewModel.addBookToShelf(
-                        userId = currentUser.id_user,
-                        shelfId = wantToReadShelf.id_shelf,
-                        bookId = book.id_book
+            DropdownMenu(
+                expanded = showShelfMenu,
+                onDismissRequest = { showShelfMenu = false }
+            ) {
+                userShelves.forEach { shelf ->
+                    val isCurrent = shelf.id_shelf == currentShelfId
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = shelf.name,
+                                color = if (isCurrent) Pink else Color.Unspecified,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            if (!isCurrent && currentShelfId != null) {
+                                bookViewModel.moveBookToShelf(
+                                    currentUser!!.id_user,
+                                    currentShelfId!!,
+                                    shelf.id_shelf,
+                                    book.id_book
+                                )
+                                currentShelfId = shelf.id_shelf
+                                onError("Moved in ${shelf.name}")
+                            }
+                            showShelfMenu = false
+                        }
                     )
-                    onShelfAdded()
-                } else {
-                    // Creează raftul "Want to Read" și adaugă cartea
-                    authViewModel.createShelf("Want to Read")
-                    // Reîncarcă rafturile și apoi adaugă — simplificat prin callback
-                    onError("Shelf \"Want to Read\" created. Push again to add to shelf \"Want To Read\".")
                 }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isAddedToShelf) Color(0xFF4CAF50) else Pink
-            ),
-            shape = RoundedCornerShape(16.dp),
-            elevation = ButtonDefaults.buttonElevation(6.dp)
-        ) {
-            Icon(
-                imageVector = if (isAddedToShelf) Icons.Default.BookmarkAdded else Icons.Default.BookmarkAdd,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isAddedToShelf) "Added in library ✓" else "Add to Want to Read",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
-            )
+            }
         }
-
-        // ── Write Review ────────────────────────────────────────────────
         Button(
             onClick = {
                 if (currentUser == null) {
@@ -490,7 +532,6 @@ private fun BookInfoCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Gen badge
             if (genreName.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -506,7 +547,6 @@ private fun BookInfoCard(
                 }
             }
 
-            // Rating badge
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = Gold.copy(alpha = 0.15f)
@@ -550,9 +590,6 @@ private fun BookInfoCard(
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  Stele vizuale (read-only)
-// ────────────────────────────────────────────────────────────────────────────
 @Composable
 fun StarRatingDisplay(rating: Float, maxStars: Int = 5, starSize: Int = 22) {
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -573,9 +610,6 @@ fun StarRatingDisplay(rating: Float, maxStars: Int = 5, starSize: Int = 22) {
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  Stele interactive (pentru review)
-// ────────────────────────────────────────────────────────────────────────────
 @Composable
 fun StarRatingInput(
     selectedRating: Int,
@@ -736,7 +770,6 @@ private fun ReviewDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Label rating
                 AnimatedVisibility(visible = rating > 0) {
                     Text(
                         text = ratingLabels.getOrElse(rating) { "" },
@@ -759,7 +792,6 @@ private fun ReviewDialog(
                     )
                 }
 
-                // Câmp comentariu expandabil
                 AnimatedVisibility(
                     visible = showComment,
                     enter = fadeIn() + expandVertically(),
@@ -787,7 +819,6 @@ private fun ReviewDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Butoane
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -837,20 +868,19 @@ private fun ReviewCard(
     comment: com.example.bookish.models.Comment?
 ) {
     Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = PinkPale),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = PinkPale),
         elevation = CardDefaults.cardElevation(0.dp),
-        border    = androidx.compose.foundation.BorderStroke(1.dp, PinkLight.copy(alpha = 0.5f))
+        border = androidx.compose.foundation.BorderStroke(1.dp, PinkLight.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                verticalAlignment      = Alignment.CenterVertically,
-                horizontalArrangement  = Arrangement.spacedBy(10.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Avatar
                 Box(
-                    modifier         = Modifier
+                    modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(
@@ -859,30 +889,29 @@ private fun ReviewCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text       = reviewer?.username?.firstOrNull()?.uppercase() ?: "?",
-                        color      = Color.White,
+                        text = reviewer?.username?.firstOrNull()?.uppercase() ?: "?",
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize   = 16.sp
+                        fontSize = 16.sp
                     )
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text       = reviewer?.username ?: "User",
+                        text = reviewer?.username ?: "User",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize   = 14.sp,
-                        color      = TextPrimary
+                        fontSize = 14.sp,
+                        color = TextPrimary
                     )
                 }
 
-                // Stars
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     repeat(5) { i ->
                         Icon(
-                            imageVector    = if (i < review.rating) Icons.Default.Star else Icons.Default.StarBorder,
+                            imageVector = if (i < review.rating) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
-                            tint           = if (i < review.rating) Gold else Color.LightGray,
-                            modifier       = Modifier.size(16.dp)
+                            tint = if (i < review.rating) Gold else Color.LightGray,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -891,9 +920,9 @@ private fun ReviewCard(
             if (!comment?.content.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text      = "\"${comment!!.content}\"",
-                    fontSize  = 13.sp,
-                    color     = TextSecondary,
+                    text = "\"${comment!!.content}\"",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
                     lineHeight = 20.sp,
                     fontStyle = FontStyle.Italic
                 )

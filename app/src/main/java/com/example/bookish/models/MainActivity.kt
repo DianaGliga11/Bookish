@@ -37,6 +37,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,6 +58,7 @@ import com.example.bookish.ui.screens.BookDetailsScreen
 import com.example.bookish.ui.screens.HomeScreen
 import com.example.bookish.ui.screens.LoginScreen
 import com.example.bookish.ui.screens.RegisterScreen
+import com.example.bookish.ui.screens.ShelfScreen
 import com.example.bookish.ui.screens.WelcomeScreen
 import com.example.bookish.ui.theme.BooklyTheme
 import com.example.bookish.viewmodel.AuthViewModel
@@ -166,14 +168,16 @@ fun BookishApp() {
         // Book Details Screen
         composable("book_details") {
             selectedBook?.let { book ->
-                BookDetailsScreen(
-                    book = book,
-                    onBackClick = {
-                        navController.popBackStack()
-                    },
-                    bookViewModel = bookViewModel,
-                    authViewModel = authViewModel
-                )
+                key(book.id_book) {
+                    BookDetailsScreen(
+                        book = book,
+                        onBackClick = {
+                            navController.popBackStack()
+                        },
+                        bookViewModel = bookViewModel,
+                        authViewModel = authViewModel
+                    )
+                }
             }
         }
 
@@ -192,15 +196,18 @@ fun BookishApp() {
 
         // Shelf Screen
         composable("shelf") {
-            PlaceholderScreen(
-                title = "My Shelf",
-                subtitle = "Your saved books will appear here",
-                onBack = {
+            ShelfScreen(
+                onBackClick = {
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                     }
                 },
-                icon = Icons.Default.Book
+                onBookClick = { book ->
+                    selectedBook = book
+                    navController.navigate("book_details")
+                },
+                authViewModel = authViewModel,
+                bookViewModel = bookViewModel
             )
         }
 

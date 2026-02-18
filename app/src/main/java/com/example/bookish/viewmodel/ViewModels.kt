@@ -348,6 +348,7 @@ class BookViewModel : ViewModel() {
     fun loadAuthorById(authorId: String) {
         viewModelScope.launch {
             try {
+                _currentAuthor.value = null
                 val doc = db.collection("authors").document(authorId).get().await()
                 _currentAuthor.value = doc.toObject(Author::class.java)?.apply {
                     id_author = doc.id
@@ -362,6 +363,7 @@ class BookViewModel : ViewModel() {
     fun loadGenreById(genreId: String) {
         viewModelScope.launch {
             try {
+                _currentGenre.value = null
                 val doc = db.collection("genres").document(genreId).get().await()
                 _currentGenre.value = doc.toObject(Genre::class.java)?.apply {
                     id_genre = doc.id
@@ -376,6 +378,7 @@ class BookViewModel : ViewModel() {
     fun loadReviewsForBook(bookId: String) {
         viewModelScope.launch {
             try {
+                _currentBookReviews.value = emptyList()
                 val snapshot = db.collection("reviews")
                     .whereEqualTo("id_book", bookId)
                     .get()
@@ -437,4 +440,42 @@ class BookViewModel : ViewModel() {
         }
     }
 
+    fun moveBookToShelf(userId: String, oldShelfId: String, newShelfId: String, bookId: String) {
+        viewModelScope.launch {
+            try {
+                val oldRelation = db.collection("shelf_books")
+                    .whereEqualTo("id_shelf", oldShelfId)
+                    .whereEqualTo("id_book", bookId)
+                    .get()
+                    .await()
+                for (doc in oldRelation.documents) {
+                    db.collection("shelf_books").document(doc.id).delete().await()
+                }
+
+                val newShlefBook = ShelfBook(
+                    id_shelf = newShelfId,
+                    id_book = bookId
+                )
+                db.collection("shelf_books").add(newShlefBook).await()
+                Log.d("BookViewModel", "Book moved from ${oldShelfId} to ${newShelfId}")
+            } catch (e: Exception) {
+                _error.value = "Failed to move book: ${e.message}"
+                Log.e("BookViewModel", "Error moving book to shelf")
+            }
+        }
+    }
+
+
+    suspend fun getShelfForBook(bookId: String, userShelfIds: List<String>): String? {
+        return try {
+            val snapshot = db.collection("shelf_books")
+                .whereEqualTo("id_book", bookId)
+                .whereIn("id_shelf", userShelfIds)
+                .get()
+                .await()
+            snapshot.documents.firstOrNull()?.getString("id_shelf")
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

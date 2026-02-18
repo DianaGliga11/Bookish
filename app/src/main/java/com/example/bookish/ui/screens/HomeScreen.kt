@@ -131,11 +131,12 @@ fun HomeScreen(
                 onTabSelected = { index ->
                     selectedTab = index
                     when (index) {
-                        0 -> onNavigateToSearch()
-                        1 -> onNavigateToShelf()
-                        2 -> onNavigateToFriends()
+                        0 -> {}
+                        1 -> onNavigateToSearch()
+                        2 -> onNavigateToShelf()
                         3 -> onNavigateToProfile()
                         4 -> onNavigateToAI()
+                        5 -> onNavigateToFriends()
                     }
                 }
             )
