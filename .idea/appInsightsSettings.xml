@@ -2,5 +2,26 @@
 <project version="4">
   <component name="AppInsightsSettings">
     <option name="selectedTabId" value="Android Vitals" />
+    <option name="tabSettings">
+      <map>
+        <entry key="Firebase Crashlytics">
+          <value>
+            <InsightsFilterSettings>
+              <option name="connection">
+                <ConnectionSetting>
+                  <option name="appId" value="com.example.bookish" />
+                  <option name="mobileSdkAppId" value="1:269406197112:android:2a0c0b8fdd72e48041a48d" />
+                  <option name="projectId" value="bookly-fbb62" />
+                  <option name="projectNumber" value="269406197112" />
+                </ConnectionSetting>
+              </option>
+              <option name="signal" value="SIGNAL_UNSPECIFIED" />
+              <option name="timeIntervalDays" value="THIRTY_DAYS" />
+              <option name="visibilityType" value="ALL" />
+            </InsightsFilterSettings>
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
 </project>
