@@ -57,6 +57,7 @@ import com.example.bookish.navigation.BookishNavigation
 import com.example.bookish.ui.screens.BookDetailsScreen
 import com.example.bookish.ui.screens.HomeScreen
 import com.example.bookish.ui.screens.LoginScreen
+import com.example.bookish.ui.screens.ProfileScreen
 import com.example.bookish.ui.screens.RegisterScreen
 import com.example.bookish.ui.screens.ShelfScreen
 import com.example.bookish.ui.screens.WelcomeScreen
@@ -243,15 +244,11 @@ fun BookishApp() {
         composable("profile") {
             ProfileScreen(
                 authViewModel = authViewModel,
-                onBack = {
-                    navController.navigate("home") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                },
+                onBack = { navController.popBackStack() },
                 onLogout = {
                     authViewModel.logout()
-                    navController.navigate("welcome") {
-                        popUpTo(0) { inclusive = true }
+                    navController.navigate("login") {
+                        popUpTo("home") { inclusive = true }
                     }
                 }
             )
@@ -327,150 +324,6 @@ fun PlaceholderScreen(
                     color = Color(0xFFFF69B4),
                     fontWeight = FontWeight.Medium
                 )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProfileScreen(
-    authViewModel: AuthViewModel,
-    onBack: () -> Unit,
-    onLogout: () -> Unit
-) {
-    val currentUserState by authViewModel.currentUser.collectAsState()
-    val userShelves by authViewModel._userShalves.collectAsState()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Profile") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFFFF69B4),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            when (currentUserState) {
-                is com.example.bookish.viewmodel.UserState.Success -> {
-                    val user =
-                        (currentUserState as com.example.bookish.viewmodel.UserState.Success).user
-
-                    // Profile Image
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF69B4)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = user.username.firstOrNull()?.uppercase() ?: "?",
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = user.username,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = user.email,
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-
-                    if (user.bio.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = user.bio,
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Shelves count
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFC0CB).copy(alpha = 0.3f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = "My Shelves",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "${userShelves.size} shelf${if (userShelves.size != 1) "ves" else ""}",
-                                fontSize = 14.sp,
-                                color = Color.Gray
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Logout Button
-                    Button(
-                        onClick = onLogout,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Red
-                        ),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
-                    ) {
-                        Text("Logout")
-                    }
-                }
-
-                is com.example.bookish.viewmodel.UserState.Loading -> {
-                    CircularProgressIndicator(color = Color(0xFFFF69B4))
-                }
-
-                is com.example.bookish.viewmodel.UserState.Error -> {
-                    Text(
-                        text = (currentUserState as com.example.bookish.viewmodel.UserState.Error).message,
-                        color = Color.Red
-                    )
-                }
             }
         }
     }

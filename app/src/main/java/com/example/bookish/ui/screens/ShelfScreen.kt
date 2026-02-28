@@ -57,6 +57,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -277,18 +279,22 @@ fun ShelfScreen(
                 selectedChallenge = null
             },
             onConfirm = { newProgress ->
+                val challengeId = selectedChallenge?.id_challenge
                 scope.launch {
                     try {
-                        db.collection("challenges")
-                            .document(selectedChallenge!!.id_challenge)
-                            .update("progress", newProgress)
-                            .await()
-                        challenges = challenges.map {
-                            if (it.id_challenge == selectedChallenge!!.id_challenge) {
-                                it.copy(progress = newProgress)
-                            } else it
+                        if(challengeId != null) {
+                            db.collection("challenges")
+                                .document(challengeId)
+                                .update("progress", newProgress)
+                                .await()
+
+                            challenges = challenges.map {
+                                if (it.id_challenge == challengeId) {
+                                    it.copy(progress = newProgress)
+                                } else it
+                            }
+                            snackbarHostState.showSnackbar("Progress updated successfully!")
                         }
-                        snackbarHostState.showSnackbar("Progress updated successfully!")
                     } catch (e: Exception) {
                         snackbarHostState.showSnackbar("Error while updating progress: ${e.message}")
                     }
@@ -325,7 +331,8 @@ fun ShelfScreen(
                         )
                         db.collection("shelf_books").add(shelfBook).await()
 
-                        val targetShelfName = userShelves.find { it.id_shelf == targetShelfId }?.name
+                        val targetShelfName =
+                            userShelves.find { it.id_shelf == targetShelfId }?.name
                         snackbarHostState.showSnackbar(
                             "\"${bookToMove!!.title}\" moved in ${targetShelfName}"
                         )
@@ -483,7 +490,7 @@ fun ShelfScreen(
                                     if (selectedShelfId == shelf.id_shelf) null else shelf.id_shelf
                             },
                             onBookClick = onBookClick,
-                            onBookLongClick = {book, shelfId ->
+                            onBookLongClick = { book, shelfId ->
                                 bookToMove = book
                                 sourceShelfId = shelfId
                                 showMoveBookDialog = true
@@ -603,57 +610,42 @@ fun ChallengeSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.EmojiEvents,
-                contentDescription = null,
-                tint = Gold,
-                modifier = Modifier.size(24.dp)
-            )
             Text(
                 text = "Challenges",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
                 color = TextPrimary
             )
         }
 
         Surface(
+            onClick = onCreateChallenge,
             shape = CircleShape,
             color = Pink,
-            modifier = Modifier.clickable(onClick = onCreateChallenge)
+            shadowElevation = 4.dp
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add challenge",
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "Create new challenge",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add challenge",
+                tint = Color.White,
+                modifier = Modifier
+                    .padding(8.dp)
+                    .size(20.dp)
+            )
         }
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(16.dp))
 
     if (isLoading) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp),
+                .height(150.dp),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(color = Pink)
@@ -662,19 +654,17 @@ fun ChallengeSection(
         EmptyChallengesState()
     } else {
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(challenges.sortedByDescending { it.date_start.seconds }) { challenge ->
+            items(challenges) { challenge ->
                 CompactChallengeCard(
-                    challenge = challenge,
-                    onClick = { onChallengeClick(challenge) },
-                    onDelete = { onDeleteChallenge(challenge) }
-                )
+                    challenge,
+                    { onChallengeClick(challenge) },
+                    { onDeleteChallenge(challenge) })
             }
         }
     }
-
 }
 
 @Composable
@@ -721,148 +711,120 @@ fun EmptyChallengesState() {
 fun CompactChallengeCard(challenge: Challenge, onClick: () -> Unit, onDelete: () -> Unit) {
     val progress = (challenge.progress / 100.0).coerceIn(0.0, 1.0).toFloat()
     val isCompleted = challenge.progress >= 100.0
-    val isExpired = challenge.date_finish.toDate().before(Date())
-
-    val cardColor = when {
-        isCompleted -> Color(0xFF4CAF50)
-        isExpired -> Color(0xFFFF5252)
-        else -> Pink
-    }
+    val statusColor = if (isCompleted) Green else Pink
+    val backgroundColor = if (isCompleted) Color(0xFFF1FBF1) else Color(0xFFFFF5F8)
 
     Card(
         modifier = Modifier
             .width(280.dp)
+            .shadow(8.dp, RoundedCornerShape(24.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor.copy(alpha = 0.1f)),
-        elevation = CardDefaults.cardElevation(2.dp)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
+                Surface(
+                    shape = CircleShape,
+                    color = statusColor.copy(alpha = 0.1f),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Flag,
-                            contentDescription = null,
-                            tint = cardColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text(
-                            text = challenge.title,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (challenge.description.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = challenge.description,
-                            fontSize = 12.sp,
-                            color = TextSecondary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = if (isCompleted) "Done" else "In Progress",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor
+                    )
                 }
+
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Delete",
-                        tint = TextSecondary,
+                        contentDescription = null,
+                        tint = TextSecondary.copy(alpha = 0.5f),
                         modifier = Modifier.size(16.dp)
                     )
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Progress",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "${challenge.progress.toInt()}%",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
 
-                Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = challenge.title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = cardColor,
-                    trackColor = cardColor.copy(alpha = 0.2f)
+            if (challenge.description.isNotEmpty()) {
+                Text(
+                    text = challenge.description,
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CompactDateChip(
-                    label = "Start",
-                    date = challenge.date_start.toDate(),
-                    modifier = Modifier.weight(1f)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "${challenge.progress.toInt()}%",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = statusColor
                 )
-                CompactDateChip(
-                    label = "Finish",
-                    date = challenge.date_finish.toDate(),
-                    modifier = Modifier.weight(1f)
+
+                Text(
+                    text = " completed",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
                 )
             }
 
-            if (isCompleted || isExpired) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = cardColor.copy(alpha = 0.15f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isCompleted) Icons.Default.EmojiEvents else Icons.Default.Close,
-                            contentDescription = null,
-                            tint = cardColor,
-                            modifier = Modifier.size(12.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(CircleShape),
+                color = statusColor,
+                trackColor = statusColor.copy(alpha = 0.1f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(12.dp)
+                )
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Text(
+                    text = "Ends on ${
+                        SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(
+                            challenge.date_finish.toDate()
                         )
-                        Text(
-                            text = if (isCompleted) "Completed" else "Expired",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = cardColor
-                        )
-                    }
-                }
+                    }",
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
             }
         }
     }
@@ -1061,7 +1023,7 @@ private fun UpdateProgressDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(16.dp)
         ) {
@@ -1095,7 +1057,7 @@ private fun UpdateProgressDialog(
                     modifier = Modifier
                         .size(120.dp)
                         .clip(CircleShape)
-                        .background(Pink.copy(alpha = 0.1f)),
+                        .background(Pink.copy(alpha = 0.05f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -1108,62 +1070,48 @@ private fun UpdateProgressDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(0.0, 25.0, 50.0, 75.0, 100.0).forEach { value ->
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { newProgress = value },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (newProgress == value) Pink else Pink.copy(alpha = 0.15f),
-                        ) {
-                            Text(
-                                text = "${value.toInt()}%",
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (newProgress == value) Color.White else Pink,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = newProgress.toInt().toString(),
-                    onValueChange = {
-                        val value = it.toDoubleOrNull()?.coerceIn(0.0, 100.0)
-                        if (value != null) newProgress = value
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Progress (%)", fontSize = 14.sp) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Pink,
-                        unfocusedBorderColor = PinkLight
+                Slider(
+                    value = newProgress.toFloat(),
+                    onValueChange = { newProgress = it.toDouble() },
+                    valueRange = 0f..100f,
+                    steps = 100,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Pink,
+                        activeTrackColor = Pink,
+                        inactiveTrackColor = Pink.copy(alpha = 0.2f)
                     ),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Button(
-                    onClick = { onConfirm(newProgress) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .padding(horizontal = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("0%", fontSize = 12.sp, color = TextSecondary)
+                    Text("100%", fontSize = 12.sp, color = TextSecondary)
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = { onConfirm(newProgress.toDouble()) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Pink),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = "Save",
+                        text = "Save Progress",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextSecondary)
                 }
             }
         }
@@ -1185,14 +1133,14 @@ private fun ShelfCard(
     var bookCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(shelf.id_shelf, refreshCounter) {
-        try{
+        try {
             val count = db.collection("shelf_books")
                 .whereEqualTo("id_shelf", shelf.id_shelf)
                 .get()
                 .await()
                 .size()
             bookCount = count
-        }catch(e: Exception){
+        } catch (e: Exception) {
             bookCount = 0
         }
     }

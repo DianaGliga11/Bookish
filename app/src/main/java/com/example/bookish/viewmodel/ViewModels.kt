@@ -2,6 +2,7 @@ package com.example.bookish.viewmodel
 
 import android.content.ContentValues.TAG
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.State
 import androidx.lifecycle.ViewModel
@@ -9,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.bookish.models.*
 import com.example.bookish.repository.*
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -159,21 +162,73 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun updateUserProfile(bio: String, profileImageUrl: String) {
-        viewModelScope.launch {
-            try {
-                val userId = repository.getCurrentUserId()
-                if (userId != null) {
-                    val updates = hashMapOf<String, Any>(
-                        "bio" to bio,
-                        "profileImageUrl" to profileImageUrl
-                    )
-                    db.collection("users").document(userId).update(updates).await()
-                    loadCurrentUser()
-                    Log.d("AuthViewModel", "User profile updated")
+    fun uploadProfileImage(it: Uri) {
+        _currentUser.value.let { userState ->
+            if (userState is UserState.Success) {
+                val userId = userState.user.id_user
+                viewModelScope.launch {
+                    try {
+                        val storageRef = FirebaseStorage.getInstance().reference
+                            .child("profileImages/$userId.jpg")
+                        storageRef.putFile(it).await()
+                        val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                        FirebaseFirestore.getInstance().collection("users")
+                            .document(userId)
+                            .update("profileImageUrl", downloadUrl)
+                            .await()
+
+                        val currentState = _currentUser.value
+                        if(currentState is UserState.Success){
+                            _currentUser.value = UserState.Success(currentState.user.copy(profileImageUrl = downloadUrl))
+                        }
+                    } catch (e: Exception) {
+                        _currentUser.value =
+                            UserState.Error(e.message ?: "Failed to upload profile image")
+                        Log.e("AuthViewModel", "Error uploading profile image", e)
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e("AuthViewModel", "Error updating user profile", e)
+            }
+        }
+    }
+
+    fun updateUserBio(it: String) {
+        _currentUser.value.let { userState ->
+            if (userState is UserState.Success) {
+                val updatedUser = userState.user.copy(bio = it)
+                viewModelScope.launch {
+                    try {
+                        FirebaseFirestore.getInstance().collection("users")
+                            .document(updatedUser.id_user)
+                            .update("bio", it)
+                            .await()
+                        _currentUser.value = UserState.Success(updatedUser)
+                    } catch (e: Exception) {
+                        _currentUser.value = UserState.Error(e.message ?: "Failed to update bio")
+                        Log.e("AuthViewModel", "Error updating bio", e)
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateUserUsername(it: String) {
+        _currentUser.value.let { userState ->
+            if (userState is UserState.Success) {
+                val updatedUser = userState.user.copy(username = it)
+                viewModelScope.launch {
+                    try {
+                        FirebaseFirestore.getInstance().collection("users")
+                            .document(updatedUser.id_user)
+                            .update("username", it)
+                            .await()
+                        _currentUser.value = UserState.Success(updatedUser)
+                    } catch (e: Exception) {
+                        _currentUser.value =
+                            UserState.Error(e.message ?: "Failed to update username")
+                        Log.e("AuthViewModel", "Error updating username", e)
+                    }
+                }
             }
         }
     }
@@ -197,6 +252,7 @@ class AuthViewModel : ViewModel() {
         }
     }
 }
+
 
 class BookViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
@@ -440,7 +496,12 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun moveBookToShelf(userId: String, oldShelfId: String, newShelfId: String, bookId: String) {
+    fun moveBookToShelf(
+        userId: String,
+        oldShelfId: String,
+        newShelfId: String,
+        bookId: String
+    ) {
         viewModelScope.launch {
             try {
                 val oldRelation = db.collection("shelf_books")
