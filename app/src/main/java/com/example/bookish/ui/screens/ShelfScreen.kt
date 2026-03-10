@@ -100,7 +100,6 @@ import com.example.bookish.viewmodel.AuthViewModel
 import com.example.bookish.viewmodel.BookViewModel
 import com.example.bookish.viewmodel.UserState
 import com.google.firebase.Timestamp
-import com.google.firebase.crashlytics.buildtools.reloc.com.google.common.io.MoreFiles
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await

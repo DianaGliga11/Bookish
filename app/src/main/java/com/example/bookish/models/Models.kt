@@ -107,7 +107,7 @@ data class GroupMessage(
     var id_book: String = ""
 )
 
-data class WeeklyRecommandation(
+data class WeeklyRecommendation(
     @DocumentId
     var id_weekly_recommandation: String = "",
     var id_user: String = "",

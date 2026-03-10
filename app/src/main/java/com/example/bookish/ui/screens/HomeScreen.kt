@@ -1,5 +1,6 @@
 package com.example.bookish.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -95,6 +96,9 @@ fun HomeScreen(
     val authors by bookViewModel.authors.collectAsState()
     val genres by bookViewModel.genres.collectAsState()
     val reviews by bookViewModel.reviews.collectAsState()
+    val aiRecommendations by bookViewModel.recommandedBooks.collectAsState()
+    val shelves by bookViewModel.allShelves.collectAsState()
+    val shelfBooks by bookViewModel.allShelfBooks.collectAsState()
 
     val booksDisplay = remember(books, authors, genres, reviews) {
         books.map { book ->
@@ -117,11 +121,38 @@ fun HomeScreen(
         }
     }
 
+    val trendingBooks = remember(booksDisplay, shelves, shelfBooks) {
+        val readShelfIds = shelves.filter { it.name.equals("Read", ignoreCase = true) }
+            .map { it.id_shelf }
+        val bookReadCounts = shelfBooks.filter { it.id_shelf in readShelfIds }
+            .groupBy { it.id_book }
+            .mapValues { it.value.size }
+
+        booksDisplay.sortedByDescending { bookDisplayData ->
+            bookReadCounts[bookDisplayData.book.id_book] ?: 0
+        }.take(10)
+    }
+
     LaunchedEffect(Unit) {
         bookViewModel.loadBooks()
         bookViewModel.loadAuthors()
         bookViewModel.loadGenres()
         bookViewModel.loadReviews()
+        bookViewModel.loadAllShelfData()
+    }
+
+    LaunchedEffect(currentUserState, books, reviews) {
+        val userSuccess = currentUserState as? UserState.Success
+        val currentUserId = userSuccess?.user?.id_user
+
+        val userReviews = reviews.filter { it.id_user == currentUserId }
+
+        //Log.d("AI_DEBUG", "Status: Books=${books.size}, TotalReviews=${reviews.size}, UserReviews=${userReviews.size}")
+
+        if (userSuccess != null && books.isNotEmpty() && userReviews.isNotEmpty()) {
+            //Log.d("AI_DEBUG", "Condiții OK! Pornesc AI pentru ${userSuccess.user.username}")
+            bookViewModel.generateAIRecommendations(userSuccess.user, books, userReviews)
+        }
     }
 
     Scaffold(
@@ -156,40 +187,32 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             HomeHeader(username = username)
-            Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = "Recommended for You",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            if (aiRecommendations.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Your Recommendations",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF9C27B0),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            if (booksDisplay.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFFFF69B4))
-                }
-            } else {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(booksDisplay.take(10)) { bookData ->
+                    items(aiRecommendations) { book ->
                         BookCard(
-                            bookData = bookData,
-                            onClick = { onBookClick(bookData.book) }
+                            bookData = BookDisplayData(book = book),
+                            onClick = { onBookClick(book) }
                         )
                     }
                 }
             }
+
 
             Spacer(modifier = Modifier.height(32.dp))
             Text(
@@ -202,7 +225,14 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (booksDisplay.isEmpty()) {
+            if (trendingBooks.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No treanding books yet", color = Color.Gray)
+                }
+            } else {
                 val trendingBooks = booksDisplay.sortedByDescending { it.reviewCount }.take(10)
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -214,11 +244,8 @@ fun HomeScreen(
                             onClick = { onBookClick(bookData.book) }
                         )
                     }
-
                 }
             }
-
-            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }

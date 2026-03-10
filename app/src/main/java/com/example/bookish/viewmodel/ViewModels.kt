@@ -4,13 +4,13 @@ import android.content.ContentValues.TAG
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.compose.runtime.State
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bookish.models.*
 import com.example.bookish.repository.*
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.RequestOptions
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-//sunt ca un enum - permit sa definesc toate starile posibile ale unui obiect
 sealed class AuthState {
     object Idle : AuthState()
     object Loading : AuthState()
@@ -290,6 +289,15 @@ class BookViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _recommandedBooks = MutableStateFlow<List<Book>>(emptyList())
+    val recommandedBooks: StateFlow<List<Book>> = _recommandedBooks.asStateFlow()
+
+    private val _allShelves = MutableStateFlow<List<Shelf>>(emptyList())
+    val allShelves: StateFlow<List<Shelf>> = _allShelves.asStateFlow()
+
+    private val _allShelfBooks = MutableStateFlow<List<ShelfBook>>(emptyList())
+    val allShelfBooks = _allShelfBooks.asStateFlow()
+
     fun loadBooks() {
         viewModelScope.launch {
             try {
@@ -431,6 +439,21 @@ class BookViewModel : ViewModel() {
         }
     }
 
+    fun loadAllShelfData(){
+        viewModelScope.launch {
+            try{
+                val shelvesSnapshot = db.collection("shelves").get().await()
+                _allShelves.value = shelvesSnapshot.toObjects(Shelf::class.java)
+
+                val shelfBooksSnapshot = db.collection("shelf_books").get().await()
+                _allShelfBooks.value = shelfBooksSnapshot.toObjects(ShelfBook::class.java)
+            }catch (e: Exception){
+                _error.value = "Failed to load shelf data: ${e.message}"
+                Log.e("BookViewModel", "Error while loading shelf data", e)
+            }
+        }
+    }
+
     fun loadReviewsForBook(bookId: String) {
         viewModelScope.launch {
             try {
@@ -537,6 +560,52 @@ class BookViewModel : ViewModel() {
             snapshot.documents.firstOrNull()?.getString("id_shelf")
         } catch (e: Exception) {
             null
+        }
+    }
+
+    fun generateAIRecommendations(user: User, allBooks: List<Book>, allReviews:List<Review>){
+        if(allBooks.isEmpty()){
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try{
+                val userLickedBookIds = allReviews
+                    .filter { it.id_user == user.id_user && it.rating >= 4 }
+                    .map{it.id_book}
+
+                val lickedTitles = allBooks
+                    .filter{it.id_book in userLickedBookIds}
+                    .joinToString { it.title }
+
+                val catalog = allBooks.joinToString (";") {"${it.title} (ID: ${it.id_book})"}
+                val prompt = """
+                    You are a book recommendation assistant for the appp 'Bookish'.
+                    User Bio: "${user.bio}"
+                    Books the user licked: $lickedTitles
+                    Available Catalog: $catalog
+                    Based on the user's bio and licked books, select the 3 best books from the Available Catalog.
+                    Return only the IDs of the books, separated by commas. Do not write prose.
+                """.trimIndent()
+
+                val generativeModel = GenerativeModel(
+                    modelName = "gemini-2.5-flash",
+                    apiKey = com.example.bookish.BuildConfig.GEMINI_API_KEY,
+                )
+
+                val response = generativeModel.generateContent(prompt)
+                val rawResponse = response.text?: ""
+                Log.d("AI_DEBUG:" , "$rawResponse" )
+
+                val recommendedIds = response.text?.split(",")?.map{it.trim()}?:emptyList()
+                _recommandedBooks.value = allBooks.filter{it.id_book in recommendedIds}
+            }catch(e: Exception){
+                _error.value = "AI Error: ${e.message}"
+                Log.e("AI_DEBUG", "Error generating AI recommendations", e)
+            }finally {
+                _isLoading.value = false
+            }
         }
     }
 }
