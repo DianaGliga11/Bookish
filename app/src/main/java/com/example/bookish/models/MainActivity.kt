@@ -49,12 +49,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.bookish.models.Book
 import com.example.bookish.navigation.BookishNavigation
 import com.example.bookish.ui.screens.BookDetailsScreen
+import com.example.bookish.ui.screens.ChatScreen
+import com.example.bookish.ui.screens.FriendsScreen
 import com.example.bookish.ui.screens.HomeScreen
 import com.example.bookish.ui.screens.LoginScreen
 import com.example.bookish.ui.screens.ProfileScreen
@@ -64,6 +68,7 @@ import com.example.bookish.ui.screens.WelcomeScreen
 import com.example.bookish.ui.theme.BooklyTheme
 import com.example.bookish.viewmodel.AuthViewModel
 import com.example.bookish.viewmodel.BookViewModel
+import com.example.bookish.viewmodel.SocialViewModel
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
@@ -85,6 +90,8 @@ fun BookishApp() {
     // ViewModels partajate pentru toată aplicația
     val authViewModel: AuthViewModel = viewModel()
     val bookViewModel: BookViewModel = viewModel()
+    val socialViewModel: SocialViewModel = viewModel()
+
 
     NavHost(
         navController = navController,
@@ -214,46 +221,61 @@ fun BookishApp() {
 
         // Friends Screen
         composable("friends") {
-            PlaceholderScreen(
-                title = "Friends",
-                subtitle = "Connect with fellow book lovers",
-                onBack = {
-                    navController.navigate("home") {
-                        popUpTo("home") { inclusive = true }
-                    }
+            FriendsScreen(
+                onNavigateToChat = { chatId ->
+                    navController.navigate("chat/$chatId")
                 },
-                icon = Icons.Default.People
+                onNavigateToBookClub = { bookClubId ->
+                    navController.navigate("book_club/$bookClubId")
+                },
+                socialViewModel = socialViewModel,
+                authViewModel = authViewModel
             )
         }
 
-        // AI Assistant Screen
-        composable("ai") {
-            PlaceholderScreen(
-                title = "AI Assistant",
-                subtitle = "Get personalized book recommendations",
-                onBack = {
-                    navController.navigate("home") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                },
-                icon = Icons.Default.AutoAwesome
-            )
-        }
-
-        // Profile Screen
-        composable("profile") {
-            ProfileScreen(
+        composable(
+            "chat/{chatId}",
+            arguments = listOf(navArgument("chatId"){type = NavType.StringType})
+        ){
+            backStackEntry ->
+            val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
+            ChatScreen(
+                chatId = chatId,
+                socialViewModel = socialViewModel,
                 authViewModel = authViewModel,
-                onBack = { navController.popBackStack() },
-                onLogout = {
-                    authViewModel.logout()
-                    navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                }
+                bookViewModel = bookViewModel,
+                onNavigateBack = {navController.popBackStack()}
             )
         }
+
+    // AI Assistant Screen
+    composable("ai") {
+        PlaceholderScreen(
+            title = "AI Assistant",
+            subtitle = "Get personalized book recommendations",
+            onBack = {
+                navController.navigate("home") {
+                    popUpTo("home") { inclusive = true }
+                }
+            },
+            icon = Icons.Default.AutoAwesome
+        )
     }
+
+    // Profile Screen
+    composable("profile") {
+        ProfileScreen(
+            authViewModel = authViewModel,
+            onBack = { navController.popBackStack() },
+            onLogout = {
+                authViewModel.logout()
+                navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+            }
+        )
+    }
+}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

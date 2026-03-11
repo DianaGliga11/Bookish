@@ -9,8 +9,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.bookish.models.*
 import com.example.bookish.repository.*
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.RequestOptions
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -178,8 +180,9 @@ class AuthViewModel : ViewModel() {
                             .await()
 
                         val currentState = _currentUser.value
-                        if(currentState is UserState.Success){
-                            _currentUser.value = UserState.Success(currentState.user.copy(profileImageUrl = downloadUrl))
+                        if (currentState is UserState.Success) {
+                            _currentUser.value =
+                                UserState.Success(currentState.user.copy(profileImageUrl = downloadUrl))
                         }
                     } catch (e: Exception) {
                         _currentUser.value =
@@ -251,7 +254,6 @@ class AuthViewModel : ViewModel() {
         }
     }
 }
-
 
 class BookViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
@@ -439,15 +441,15 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun loadAllShelfData(){
+    fun loadAllShelfData() {
         viewModelScope.launch {
-            try{
+            try {
                 val shelvesSnapshot = db.collection("shelves").get().await()
                 _allShelves.value = shelvesSnapshot.toObjects(Shelf::class.java)
 
                 val shelfBooksSnapshot = db.collection("shelf_books").get().await()
                 _allShelfBooks.value = shelfBooksSnapshot.toObjects(ShelfBook::class.java)
-            }catch (e: Exception){
+            } catch (e: Exception) {
                 _error.value = "Failed to load shelf data: ${e.message}"
                 Log.e("BookViewModel", "Error while loading shelf data", e)
             }
@@ -563,25 +565,25 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun generateAIRecommendations(user: User, allBooks: List<Book>, allReviews:List<Review>){
-        if(allBooks.isEmpty()){
+    fun generateAIRecommendations(user: User, allBooks: List<Book>, allReviews: List<Review>) {
+        if (allBooks.isEmpty()) {
             return
         }
 
         viewModelScope.launch {
             _isLoading.value = true
-            try{
+            try {
                 val userLickedBookIds = allReviews
                     .filter { it.id_user == user.id_user && it.rating >= 4 }
-                    .map{it.id_book}
+                    .map { it.id_book }
 
                 val lickedTitles = allBooks
-                    .filter{it.id_book in userLickedBookIds}
+                    .filter { it.id_book in userLickedBookIds }
                     .joinToString { it.title }
 
-                val catalog = allBooks.joinToString (";") {"${it.title} (ID: ${it.id_book})"}
+                val catalog = allBooks.joinToString(";") { "${it.title} (ID: ${it.id_book})" }
                 val prompt = """
-                    You are a book recommendation assistant for the appp 'Bookish'.
+                    You are a book recommendation assistant for the app 'Bookish'.
                     User Bio: "${user.bio}"
                     Books the user licked: $lickedTitles
                     Available Catalog: $catalog
@@ -595,17 +597,276 @@ class BookViewModel : ViewModel() {
                 )
 
                 val response = generativeModel.generateContent(prompt)
-                val rawResponse = response.text?: ""
-                Log.d("AI_DEBUG:" , "$rawResponse" )
+                val rawResponse = response.text ?: ""
+                Log.d("AI_DEBUG:", "$rawResponse")
 
-                val recommendedIds = response.text?.split(",")?.map{it.trim()}?:emptyList()
-                _recommandedBooks.value = allBooks.filter{it.id_book in recommendedIds}
-            }catch(e: Exception){
+                val recommendedIds = response.text?.split(",")?.map { it.trim() } ?: emptyList()
+                _recommandedBooks.value = allBooks.filter { it.id_book in recommendedIds }
+            } catch (e: Exception) {
                 _error.value = "AI Error: ${e.message}"
                 Log.e("AI_DEBUG", "Error generating AI recommendations", e)
-            }finally {
+            } finally {
                 _isLoading.value = false
             }
         }
+    }
+}
+
+class SocialViewModel : ViewModel() {
+    private val db = FirebaseFirestore.getInstance()
+
+    private val _friends = MutableStateFlow<List<User>>(emptyList())
+    val friends = _friends.asStateFlow()
+
+    private val _pendingRequests = MutableStateFlow<List<User>>(emptyList())
+    val pendingRequests = _pendingRequests.asStateFlow()
+
+    private val _myBookClubs = MutableStateFlow<List<BookClub>>(emptyList())
+    val myBookClubs = _myBookClubs.asStateFlow()
+
+    private val _searchResults = MutableStateFlow<List<User>>(emptyList())
+    val searchResults = _searchResults.asStateFlow()
+
+    private val _messages = MutableStateFlow<List<PrivateMessage>>(emptyList())
+    val messages = _messages.asStateFlow()
+    fun loadSocialData(currentUserId: String) {
+        viewModelScope.launch {
+            val friendships1 = db.collection("friendships")
+                .whereEqualTo("id_user1", currentUserId)
+                .whereEqualTo("status", "accepted")
+                .get()
+                .await()
+
+            val friendships2 = db.collection("friendships")
+                .whereEqualTo("id_user2", currentUserId)
+                .whereEqualTo("status", "accepted")
+                .get()
+                .await()
+
+            val friendIds = mutableSetOf<String>()
+            friendships1.documents.forEach { doc ->
+                doc.toObject(Friendship::class.java)?.id_user2?.let {
+                    friendIds.add(it)
+                }
+            }
+            friendships2.documents.forEach { doc ->
+                doc.toObject(Friendship::class.java)?.id_user1?.let {
+                    friendIds.add(it)
+                }
+            }
+
+            val friendsList = friendIds.mapNotNull { friendId ->
+                db.collection("users")
+                    .document(friendId)
+                    .get()
+                    .await()
+                    .toObject(User::class.java)
+            }
+            _friends.value = friendsList
+
+            val requests = db.collection("friendships")
+                .whereEqualTo("id_user2", currentUserId)
+                .whereEqualTo("status", "pending")
+                .get()
+                .await()
+
+            val requesterIds = requests.documents.mapNotNull { doc ->
+                doc.toObject(Friendship::class.java)?.id_user1
+            }
+
+            val requestersList = requesterIds.mapNotNull { requesterId ->
+                db.collection("users")
+                    .document(requesterId)
+                    .get()
+                    .await()
+                    .toObject(User::class.java)
+            }
+            _pendingRequests.value = requestersList
+
+            val memberships = db.collection("book_club_members")
+                .whereEqualTo("id_user", currentUserId)
+                .whereEqualTo("status", "active")
+                .get()
+                .await()
+
+            val clubIds = memberships.documents.mapNotNull {
+                it.getString("id_book_club")
+            }
+
+            if (clubIds.isNotEmpty()) {
+                val clubsList = clubIds.mapNotNull { clubId ->
+                    db.collection("book_clubs")
+                        .document(clubId)
+                        .get()
+                        .await()
+                        .toObject(BookClub::class.java)
+                }
+                _myBookClubs.value = clubsList
+            }
+
+            Log.d("SocialViewModel", "Social data loaded: ${friendsList.size} friends, ${requestersList.size} requests")
+        }
+    }
+
+    private fun getConversationId(userId1: String, userId2: String): String {
+        return if (userId1 < userId2) "${userId1}_$userId2" else "${userId2}_$userId1"
+    }
+
+    fun sendPrivateMessage(
+        senderId: String,
+        receiverId: String,
+        text: String,
+        bookId: String = ""
+    ) {
+
+        val conversationId = if (senderId < receiverId) {
+            "${senderId}_$receiverId"
+        } else {
+            "${receiverId}_$senderId"
+        }
+
+        val message = PrivateMessage(
+            id_sender = senderId,
+            id_receiver = receiverId,
+            content = text,
+            id_book = bookId,
+            sendingDate = Timestamp.now(),
+            conversationId = conversationId
+        )
+
+        viewModelScope.launch {
+            try {
+                db.collection("private_messages").add(message).await()
+                Log.d("SocialViewModel", "Private message send successfully")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error sending private message", e)
+            }
+        }
+    }
+
+    fun sendGroupMessage(clubId: String, userId: String, text: String, bookId: String = "") {
+        val message = GroupMessage(
+            id_bookClub = clubId,
+            id_user = userId,
+            content = text,
+            id_book = bookId
+        )
+
+        viewModelScope.launch {
+            try {
+                db.collection("group_messages").add(message).await()
+                Log.d("SocialViewModel", "Group message send successfully")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error sending group message", e)
+            }
+
+        }
+    }
+
+    fun acceptFriendRequest(currentUserId: String, requesterId: String) {
+        viewModelScope.launch {
+            try {
+                val query = db.collection("friendships")
+                    .whereEqualTo("id_user1", requesterId)
+                    .whereEqualTo("id_user2", currentUserId)
+                    .whereEqualTo("status", "pending")
+                    .get()
+                    .await()
+
+                for (documn in query.documents) {
+                    db.collection("friendships")
+                        .document(documn.id)
+                        .update("status", "accepted")
+                        .await()
+                }
+
+                loadSocialData(currentUserId)
+                Log.d("SocialViewModel", "Friend request accepted")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error accepting friend request", e)
+            }
+        }
+    }
+
+    fun declineFriendRequest(currentUserId: String, requesterId: String) {
+        viewModelScope.launch {
+            try {
+                val query = db.collection("friendships")
+                    .whereEqualTo("id_user1", requesterId)
+                    .whereEqualTo("id_user2", currentUserId)
+                    .whereEqualTo("status", "pending")
+                    .get()
+                    .await()
+
+                for (document in query.documents) {
+                    db.collection("friendships")
+                        .document(document.id)
+                        .delete()
+                        .await()
+                }
+                loadSocialData(currentUserId)
+                Log.d("SocialViewModel", "Friend request declined")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error declining friend request", e)
+            }
+        }
+    }
+
+    fun searchUsers(query: String) {
+        if (query.isEmpty()) {
+            _searchResults.value = emptyList()
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val snapshot = db.collection("users")
+                    .whereGreaterThanOrEqualTo("username", query)
+                    .whereLessThanOrEqualTo("username", query + "\uf8ff")
+                    .get()
+                    .await()
+
+                _searchResults.value = snapshot.toObjects(User::class.java)
+                Log.d("SocialViewModel", "Search results: ${_searchResults.value}")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error searching users")
+            }
+        }
+    }
+
+    fun sendFriendRequest(senderId: String, receiverId: String) {
+        val newFriendship = Friendship(
+            id_user1 = senderId,
+            id_user2 = receiverId,
+            status = "pending"
+        )
+
+        viewModelScope.launch {
+            try {
+                db.collection("friendships").add(newFriendship).await()
+                Log.d("SocialViewModel", "Friend request sent")
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error sending friend request", e)
+            }
+        }
+    }
+
+    fun listenForMessages(currentUserId: String, chatPartnerId: String) {
+        val conversationId = if (currentUserId < chatPartnerId) {
+            "${currentUserId}_$chatPartnerId"
+        } else {
+            "${chatPartnerId}_$currentUserId"
+        }
+
+        db.collection("private_messages")
+            .whereEqualTo("conversationId", conversationId)
+            .orderBy("sendingDate", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                val list = snapshot?.documents?.mapNotNull {
+                    it.toObject(PrivateMessage::class.java)
+                }
+                _messages.value = list ?: emptyList()
+            }
     }
 }

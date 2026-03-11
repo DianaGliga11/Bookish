@@ -95,4 +95,5 @@ dependencies {
 
     //AI
     implementation("com.google.ai.client.generativeai:generativeai:0.4.0")
+    implementation(libs.material3)
 }

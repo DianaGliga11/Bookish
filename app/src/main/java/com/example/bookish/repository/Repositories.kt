@@ -365,7 +365,7 @@ class MessageRepository {
 
     suspend fun sendPrivateMessage(message: PrivateMessage): Result<Unit> {
         return try {
-            db.collection("private_message").add(message).await()
+            db.collection("private_messages").add(message).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -374,7 +374,7 @@ class MessageRepository {
 
     suspend fun getConversation(user1Id: String, user2Id: String): Result<List<PrivateMessage>> {
         return try {
-            val messages = db.collection("private_message")
+            val messages = db.collection("private_messages")
                 .orderBy("sendingDate", Query.Direction.ASCENDING)
                 .get().await()
                 .toObjects(PrivateMessage::class.java)

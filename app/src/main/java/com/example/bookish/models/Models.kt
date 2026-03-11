@@ -96,7 +96,8 @@ data class PrivateMessage(
     var id_receiver: String = "",
     var content: String = "",
     var sendingDate: Timestamp = Timestamp.now(),
-    var id_book: String = ""
+    var id_book: String = "",
+    var conversationId: String = ""
 )
 
 data class GroupMessage(
@@ -104,6 +105,8 @@ data class GroupMessage(
     var id_group_message: String = "",
     var id_bookClub: String = "",
     var id_user: String = "",
+    var content: String = "",
+    var sendingDate: Timestamp = Timestamp.now(),
     var id_book: String = ""
 )
 
