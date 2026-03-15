@@ -8,10 +8,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bookish.models.*
 import com.example.bookish.repository.*
+import com.example.bookish.utils.FCMTokenManager
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.firebase.Timestamp
-import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -627,8 +628,18 @@ class SocialViewModel : ViewModel() {
     private val _searchResults = MutableStateFlow<List<User>>(emptyList())
     val searchResults = _searchResults.asStateFlow()
 
-    private val _messages = MutableStateFlow<List<PrivateMessage>>(emptyList())
-    val messages = _messages.asStateFlow()
+    private val _privateMessages = MutableStateFlow<List<PrivateMessage>>(emptyList())
+    val privateMessages = _privateMessages.asStateFlow()
+    private var privateMessagesListener: ListenerRegistration? = null
+
+    private val _groupMessages = MutableStateFlow<List<GroupMessage>>(emptyList())
+    val groupMessages = _groupMessages.asStateFlow()
+    private var groupMessagesListener: ListenerRegistration? = null
+
+    private val _sentRequests = MutableStateFlow<Set<String>>(emptySet())
+    val sentRequests = _sentRequests.asStateFlow()
+
+
     fun loadSocialData(currentUserId: String) {
         viewModelScope.launch {
             val friendships1 = db.collection("friendships")
@@ -704,7 +715,12 @@ class SocialViewModel : ViewModel() {
                 _myBookClubs.value = clubsList
             }
 
-            Log.d("SocialViewModel", "Social data loaded: ${friendsList.size} friends, ${requestersList.size} requests")
+            loadSentRequests(currentUserId)
+
+            Log.d(
+                "SocialViewModel",
+                "Social data loaded: ${friendsList.size} friends, ${requestersList.size} requests"
+            )
         }
     }
 
@@ -719,11 +735,7 @@ class SocialViewModel : ViewModel() {
         bookId: String = ""
     ) {
 
-        val conversationId = if (senderId < receiverId) {
-            "${senderId}_$receiverId"
-        } else {
-            "${receiverId}_$senderId"
-        }
+        val conversationId = getConversationId(senderId, receiverId)
 
         val message = PrivateMessage(
             id_sender = senderId,
@@ -733,6 +745,8 @@ class SocialViewModel : ViewModel() {
             sendingDate = Timestamp.now(),
             conversationId = conversationId
         )
+
+        _privateMessages.value = _privateMessages.value + message
 
         viewModelScope.launch {
             try {
@@ -744,13 +758,21 @@ class SocialViewModel : ViewModel() {
         }
     }
 
-    fun sendGroupMessage(clubId: String, userId: String, text: String, bookId: String = "") {
+    fun sendGroupMessage(
+        clubId: String,
+        userId: String,
+        text: String,
+        bookId: String = ""
+    ) {
+
         val message = GroupMessage(
             id_bookClub = clubId,
             id_user = userId,
             content = text,
             id_book = bookId
         )
+
+        _groupMessages.value = _groupMessages.value + message
 
         viewModelScope.launch {
             try {
@@ -844,6 +866,7 @@ class SocialViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 db.collection("friendships").add(newFriendship).await()
+                _sentRequests.value = _sentRequests.value + receiverId
                 Log.d("SocialViewModel", "Friend request sent")
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error sending friend request", e)
@@ -852,21 +875,69 @@ class SocialViewModel : ViewModel() {
     }
 
     fun listenForMessages(currentUserId: String, chatPartnerId: String) {
-        val conversationId = if (currentUserId < chatPartnerId) {
-            "${currentUserId}_$chatPartnerId"
-        } else {
-            "${chatPartnerId}_$currentUserId"
-        }
+        val convId = getConversationId(currentUserId, chatPartnerId)
 
-        db.collection("private_messages")
-            .whereEqualTo("conversationId", conversationId)
+        privateMessagesListener?.remove()
+        privateMessagesListener = null
+        _privateMessages.value = emptyList()
+
+
+        privateMessagesListener = db.collection("private_messages")
+            .whereEqualTo("conversationId", convId) // Filtrare ultra-rapidă
             .orderBy("sendingDate", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                val list = snapshot?.documents?.mapNotNull {
-                    it.toObject(PrivateMessage::class.java)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("CHAT_ERROR", "Listen failed: ${e.message}")
+                    return@addSnapshotListener
                 }
-                _messages.value = list ?: emptyList()
+
+                val list = snapshot?.toObjects(PrivateMessage::class.java) ?: emptyList()
+                _privateMessages.value = list
+                Log.d("CHAT_DEBUG", "Am găsit ${list.size} mesaje pentru $convId")
             }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        privateMessagesListener?.remove()
+        groupMessagesListener?.remove()
+    }
+
+    fun listenForGroupMessages(clubId: String) {
+        groupMessagesListener?.remove()
+
+        groupMessagesListener = db.collection("group_messages")
+            .whereEqualTo("id_bookClub", clubId)
+            .orderBy("sendingDate", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("CHAT_ERROR", "Listen failed: ${e.message}")
+                    return@addSnapshotListener
+                }
+                _groupMessages.value = snapshot?.toObjects(GroupMessage::class.java) ?: emptyList()
+            }
+    }
+
+    fun loadSentRequests(currentUserId: String) {
+        viewModelScope.launch {
+            try {
+                val snapshot = db.collection("friendships")
+                    .whereEqualTo("id_user1", currentUserId)
+                    .whereEqualTo("status", "pending")
+                    .get()
+                    .await()
+
+                val ids = snapshot.documents.mapNotNull {
+                    it.toObject(Friendship::class.java)?.id_user2
+                }.toSet()
+                _sentRequests.value = ids
+            } catch (e: Exception) {
+                Log.e("SocialViewModel", "Error loading sent requests", e)
+            }
+        }
+    }
+
+    fun clearSearchResults() {
+        _searchResults.value = emptyList()
     }
 }

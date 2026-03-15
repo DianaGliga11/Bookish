@@ -59,6 +59,7 @@ import com.example.bookish.navigation.BookishNavigation
 import com.example.bookish.ui.screens.BookDetailsScreen
 import com.example.bookish.ui.screens.ChatScreen
 import com.example.bookish.ui.screens.FriendsScreen
+import com.example.bookish.ui.screens.GroupChatScreen
 import com.example.bookish.ui.screens.HomeScreen
 import com.example.bookish.ui.screens.LoginScreen
 import com.example.bookish.ui.screens.ProfileScreen
@@ -222,6 +223,11 @@ fun BookishApp() {
         // Friends Screen
         composable("friends") {
             FriendsScreen(
+                onNavigateBack = {
+                    navController.navigate("home") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                },
                 onNavigateToChat = { chatId ->
                     navController.navigate("chat/$chatId")
                 },
@@ -235,47 +241,68 @@ fun BookishApp() {
 
         composable(
             "chat/{chatId}",
-            arguments = listOf(navArgument("chatId"){type = NavType.StringType})
-        ){
-            backStackEntry ->
+            arguments = listOf(navArgument("chatId") { type = NavType.StringType })
+        ) { backStackEntry ->
             val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
             ChatScreen(
                 chatId = chatId,
                 socialViewModel = socialViewModel,
                 authViewModel = authViewModel,
                 bookViewModel = bookViewModel,
-                onNavigateBack = {navController.popBackStack()}
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBook = { book ->
+                    selectedBook = book
+                    navController.navigate("book_details")
+                }
             )
         }
 
-    // AI Assistant Screen
-    composable("ai") {
-        PlaceholderScreen(
-            title = "AI Assistant",
-            subtitle = "Get personalized book recommendations",
-            onBack = {
-                navController.navigate("home") {
-                    popUpTo("home") { inclusive = true }
+        composable(
+            "book_club/{bookClubId}",
+            arguments = listOf(navArgument("bookClubId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val bookClubId = backStackEntry.arguments?.getString("bookClubId") ?: ""
+            GroupChatScreen(
+                clubId = bookClubId,
+                socialViewModel = socialViewModel,
+                authViewModel = authViewModel,
+                bookViewModel = bookViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBook = { book ->
+                    selectedBook = book
+                    navController.navigate("book_details")
                 }
-            },
-            icon = Icons.Default.AutoAwesome
-        )
-    }
+            )
+        }
 
-    // Profile Screen
-    composable("profile") {
-        ProfileScreen(
-            authViewModel = authViewModel,
-            onBack = { navController.popBackStack() },
-            onLogout = {
-                authViewModel.logout()
-                navController.navigate("login") {
-                    popUpTo("home") { inclusive = true }
+        // AI Assistant Screen
+        composable("ai") {
+            PlaceholderScreen(
+                title = "AI Assistant",
+                subtitle = "Get personalized book recommendations",
+                onBack = {
+                    navController.navigate("home") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                },
+                icon = Icons.Default.AutoAwesome
+            )
+        }
+
+        // Profile Screen
+        composable("profile") {
+            ProfileScreen(
+                authViewModel = authViewModel,
+                onBack = { navController.popBackStack() },
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate("login") {
+                        popUpTo("home") { inclusive = true }
+                    }
                 }
-            }
-        )
+            )
+        }
     }
-}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,5 +1,6 @@
 package com.example.bookish.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,9 +21,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,9 +54,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.example.bookish.models.Book
 import com.example.bookish.viewmodel.AuthViewModel
@@ -82,10 +82,12 @@ fun ChatScreen(
     socialViewModel: SocialViewModel,
     authViewModel: AuthViewModel,
     bookViewModel: BookViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToBook: (Book) -> Unit
 ) {
-    val currentUser = (authViewModel.currentUser.collectAsState().value as? UserState.Success)?.user
-    val messages by socialViewModel.messages.collectAsState()
+    val currentUserState by authViewModel.currentUser.collectAsState()
+    val messages by socialViewModel.privateMessages.collectAsState()
+    val currentUser = (currentUserState as? UserState.Success)?.user
 
     var messageText by remember { mutableStateOf("") }
     var showBookPicker by remember { mutableStateOf(false) }
@@ -101,8 +103,13 @@ fun ChatScreen(
             .mapNotNull { sb -> allBooks.find { it.id_book == sb.id_book } }
     }
 
-    LaunchedEffect(chatId) {
-        currentUser?.let { socialViewModel.listenForMessages(it.id_user, chatId) }
+
+    LaunchedEffect(chatId, currentUserState) {
+        val userId = (currentUserState as? UserState.Success)?.user?.id_user
+        Log.d("CHAT_DEBUG", "LaunchedEffect rulat! chatId=$chatId, userId=$userId")
+        if (userId != null) {
+            socialViewModel.listenForMessages(userId, chatId)
+        }
     }
 
     Scaffold(
@@ -151,7 +158,9 @@ fun ChatScreen(
                         content = msg.content,
                         bookId = msg.id_book,
                         isMine = msg.id_sender == currentUser?.id_user,
-                        timestamp = msg.sendingDate
+                        timestamp = msg.sendingDate,
+                        allBooks = allBooks,
+                        onNavigateToBook = onNavigateToBook
                     )
                 }
             }
@@ -247,7 +256,9 @@ fun ChatBubble(
     content: String,
     bookId: String,
     isMine: Boolean,
-    timestamp: Timestamp
+    timestamp: Timestamp,
+    allBooks: List<Book>,
+    onNavigateToBook: (Book) -> Unit
 ) {
     val bubbleColor = if (isMine) Pink else PinkPale
     val textColor = if (isMine) Color.White else Color.Black
@@ -273,18 +284,21 @@ fun ChatBubble(
         ) {
             Column {
                 if (bookId.isNotEmpty()) {
-                    SharedBookPreview(bookId = bookId)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    SharedBookPreview(bookId = bookId, allBooks = allBooks, onNavigateToBook)
                 }
-                if (content.isEmpty()) {
+                if (content.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = content,
                         fontSize = 15.sp,
-                        color = textColor
+                        color = textColor,
+                        lineHeight = 20.sp
                     )
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(timestamp.toDate()),
             fontSize = 10.sp,
@@ -297,17 +311,16 @@ fun ChatBubble(
 @Composable
 fun SharedBookPreview(
     bookId: String,
-    bookViewModel: BookViewModel = viewModel()
+    allBooks: List<Book>,
+    onNaigateToBook: (Book) -> Unit
 ) {
-    val allBooks by bookViewModel.books.collectAsState()
     val book = allBooks.find { it.id_book == bookId }
 
     if (book != null) {
         Card(
             modifier = Modifier
-                .padding(top = 8.dp)
-                .width(140.dp)
-                .clickable {},
+                .fillMaxWidth()
+                .clickable { onNaigateToBook(book) },
             shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
@@ -315,25 +328,60 @@ fun SharedBookPreview(
                 modifier = Modifier.padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = rememberAsyncImagePainter(book.coverImageUrl),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(40.dp, 60.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                if (book.coverImageUrl.isNotEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(book.coverImageUrl),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(40.dp, 60.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp, 70.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PinkLight),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Book,
+                            contentDescription = null,
+                            tint = Pink,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
 
-                Text(
-                    text = book.title,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = TextPrimary
-                )
+                    Text(
+                        text = book.title,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = TextPrimary
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MenuBook,
+                            contentDescription = null,
+                            tint = Pink,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "Tap to view",
+                            fontSize = 11.sp,
+                            color = Pink,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
     }
@@ -385,3 +433,4 @@ fun ChatInputBar(
         }
     }
 }
+

@@ -95,5 +95,10 @@ dependencies {
 
     //AI
     implementation("com.google.ai.client.generativeai:generativeai:0.4.0")
+
+    //Messaging
+    implementation("com.google.firebase:firebase-messaging:24.0.0")
     implementation(libs.material3)
+    implementation(libs.androidx.room3.runtime)
+    implementation(libs.androidx.room.ktx)
 }
