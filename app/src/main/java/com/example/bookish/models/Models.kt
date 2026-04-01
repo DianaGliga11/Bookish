@@ -80,14 +80,14 @@ data class BookClub(
     var description: String = ""
 )
 
-data class BookClubMember (
-    @DocumentId
-    var id_book_club_member: String = "",
-    var id_book_club: String = "",
-    var id_user: String = "",
-    var role: String = "",
-    var status: String = ""
-)
+//data class BookClubMember (
+//    @DocumentId
+//    var id_book_club_member: String = "",
+//    var id_book_club: String = "",
+//    var id_user: String = "",
+//    var role: String = "",
+//    var status: String = ""
+//)
 
 data class PrivateMessage(
     @DocumentId
@@ -110,14 +110,14 @@ data class GroupMessage(
     var id_book: String = ""
 )
 
-data class WeeklyRecommendation(
-    @DocumentId
-    var id_weekly_recommandation: String = "",
-    var id_user: String = "",
-    var id_book: String = "",
-    var content: String = "",
-    var sendingDate: Timestamp = Timestamp.now()
-)
+//data class WeeklyRecommendation(
+//    @DocumentId
+//    var id_weekly_recommandation: String = "",
+//    var id_user: String = "",
+//    var id_book: String = "",
+//    var content: String = "",
+//    var sendingDate: Timestamp = Timestamp.now()
+//)
 
 data class Challenge(
     @DocumentId
@@ -138,4 +138,14 @@ data class ChatInteractions(
     var messageChatbot: String = "",
     var generationDate: Timestamp = Timestamp.now()
 )
+
+data class AiMessage(
+    @DocumentId
+    var id: String = "",
+    var content: String = "",
+    val isFromAi: Boolean = false,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isStreaming: Boolean = false
+)
+
 

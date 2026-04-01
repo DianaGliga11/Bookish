@@ -4,12 +4,15 @@ import android.content.ContentValues.TAG
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bookish.models.*
 import com.example.bookish.repository.*
-import com.example.bookish.utils.FCMTokenManager
 import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.Content
+import com.google.ai.client.generativeai.type.content
+import com.google.android.gms.common.util.CollectionUtils.mapOf
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlin.collections.mapOf
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -48,7 +52,11 @@ sealed class OperationState {
 }
 
 class AuthViewModel : ViewModel() {
-    private val repository = AuthRepository()
+    private val authRepository = AuthRepository()
+    private val userRepository = UserRepository()
+    private val shelfRepository = ShelfRepository()
+
+
     private val db = FirebaseFirestore.getInstance()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
@@ -68,7 +76,7 @@ class AuthViewModel : ViewModel() {
     fun register(email: String, password: String, username: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
-            val result = repository.register(email, password, username)
+            val result = authRepository.register(email, password, username)
             _authState.value = if (result.isSuccess) {
                 loadCurrentUser()
                 AuthState.Success(result.getOrNull() ?: "")
@@ -81,7 +89,7 @@ class AuthViewModel : ViewModel() {
     fun login(email: String, password: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
-            val result = repository.login(email, password)
+            val result = authRepository.login(email, password)
             _authState.value = if (result.isSuccess) {
                 loadCurrentUser()
                 AuthState.Success("Login successful")
@@ -92,19 +100,19 @@ class AuthViewModel : ViewModel() {
     }
 
     fun logout() {
-        repository.logout()
+        authRepository.logout()
         _authState.value = AuthState.Idle
         _currentUser.value = UserState.Loading
         _userShelves.value = emptyList()
     }
 
-    fun getGoogleSignInClient(context: Context) = repository.getGoogleSignInClient(context)
+    fun getGoogleSignInClient(context: Context) = authRepository.getGoogleSignInClient(context)
 
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             Log.d(TAG, "Google Sign In called from UI")
             _authState.value = AuthState.Loading
-            val result = repository.signInWithGoogle(idToken)
+            val result = authRepository.signInWithGoogle(idToken)
             _authState.value = if (result.isSuccess) {
                 loadCurrentUser()
                 AuthState.Success(result.getOrNull() ?: "")
@@ -115,13 +123,13 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun getCurrentUserId(): String? = repository.getCurrentUserId()
+    fun getCurrentUserId(): String? = authRepository.getCurrentUserId()
 
     fun loadCurrentUser() {
         viewModelScope.launch {
             try {
                 _currentUser.value = UserState.Loading
-                val userId = repository.getCurrentUserId()
+                val userId = authRepository.getCurrentUserId()
 
                 if (userId != null) {
                     val doc = db.collection("users").document(userId).get().await()
@@ -147,17 +155,11 @@ class AuthViewModel : ViewModel() {
     private fun loadUserShelves(userId: String) {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("shelves")
-                    .whereEqualTo("id_user", userId)
-                    .get()
-                    .await()
-                val shelves = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Shelf::class.java)?.apply {
-                        id_shelf = doc.id
-                    }
+                val shelves = shelfRepository.getUserShelves(userId)
+                if (shelves.isSuccess) {
+                    _userShelves.value = shelves.getOrNull() ?: emptyList()
+                    Log.d("AuthViewModel", "User shelves loaded: $shelves")
                 }
-                _userShelves.value = shelves
-                Log.d("AuthViewModel", "User shelves loaded: $shelves")
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error loading user shelves", e)
             }
@@ -170,20 +172,13 @@ class AuthViewModel : ViewModel() {
                 val userId = userState.user.id_user
                 viewModelScope.launch {
                     try {
-                        val storageRef = FirebaseStorage.getInstance().reference
-                            .child("profileImages/$userId.jpg")
-                        storageRef.putFile(it).await()
-                        val downloadUrl = storageRef.downloadUrl.await().toString()
-
-                        FirebaseFirestore.getInstance().collection("users")
-                            .document(userId)
-                            .update("profileImageUrl", downloadUrl)
-                            .await()
-
-                        val currentState = _currentUser.value
-                        if (currentState is UserState.Success) {
+                        val result = userRepository.uploadProfileImage(userId, it)
+                        if (result.isSuccess) {
+                            val downloadUrl = result.getOrNull()!!
                             _currentUser.value =
-                                UserState.Success(currentState.user.copy(profileImageUrl = downloadUrl))
+                                UserState.Success(userState.user.copy(profileImageUrl = downloadUrl))
+                        } else {
+                            _currentUser.value = UserState.Error("Failed to upload profile image")
                         }
                     } catch (e: Exception) {
                         _currentUser.value =
@@ -198,14 +193,17 @@ class AuthViewModel : ViewModel() {
     fun updateUserBio(it: String) {
         _currentUser.value.let { userState ->
             if (userState is UserState.Success) {
-                val updatedUser = userState.user.copy(bio = it)
                 viewModelScope.launch {
                     try {
-                        FirebaseFirestore.getInstance().collection("users")
-                            .document(updatedUser.id_user)
-                            .update("bio", it)
-                            .await()
-                        _currentUser.value = UserState.Success(updatedUser)
+                        val result = userRepository.updateUser(
+                            userState.user.id_user,
+                            mapOf("bio" to it)
+                        )
+                        if (result.isSuccess) {
+                            _currentUser.value = UserState.Success(
+                                userState.user.copy(bio = it)
+                            )
+                        }
                     } catch (e: Exception) {
                         _currentUser.value = UserState.Error(e.message ?: "Failed to update bio")
                         Log.e("AuthViewModel", "Error updating bio", e)
@@ -221,11 +219,15 @@ class AuthViewModel : ViewModel() {
                 val updatedUser = userState.user.copy(username = it)
                 viewModelScope.launch {
                     try {
-                        FirebaseFirestore.getInstance().collection("users")
-                            .document(updatedUser.id_user)
-                            .update("username", it)
-                            .await()
-                        _currentUser.value = UserState.Success(updatedUser)
+                        val result = userRepository.updateUser(
+                            userState.user.id_user,
+                            mapOf("username" to it)
+                        )
+                        if (result.isSuccess) {
+                            _currentUser.value = UserState.Success(
+                                userState.user.copy(username = it)
+                            )
+                        }
                     } catch (e: Exception) {
                         _currentUser.value =
                             UserState.Error(e.message ?: "Failed to update username")
@@ -239,15 +241,16 @@ class AuthViewModel : ViewModel() {
     fun createShelf(name: String) {
         viewModelScope.launch {
             try {
-                val userId = repository.getCurrentUserId()
+                val userId = authRepository.getCurrentUserId()
                 if (userId != null) {
                     val shelf = Shelf(
                         name = name,
                         id_user = userId
                     )
-                    db.collection("shelves").add(shelf).await()
-                    loadUserShelves(userId)
-                    Log.d("AuthViewModel", "Shelf created")
+                    val result = shelfRepository.createShelf(shelf)
+                    if (result.isSuccess) {
+                        Log.d("AuthViewModel", "Shelf created")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error creating shelf", e)
@@ -257,7 +260,15 @@ class AuthViewModel : ViewModel() {
 }
 
 class BookViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
+    private val userRepository = UserRepository()
+    private val shelfRepository = ShelfRepository()
+    private val bookRepository = BookRepository()
+    private val reviewRepository = ReviewRepository()
+    private val commentRepository = CommentRepository()
+    private val authorRepository = AuthorRepository()
+    private val genreRepository = GenreRepository()
+
+    private val aiChatRepository = AIChatRepository()
 
     private val _books = MutableStateFlow<List<Book>>(emptyList())
     val books: StateFlow<List<Book>> = _books.asStateFlow()
@@ -291,28 +302,45 @@ class BookViewModel : ViewModel() {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-
-    private val _recommandedBooks = MutableStateFlow<List<Book>>(emptyList())
-    val recommandedBooks: StateFlow<List<Book>> = _recommandedBooks.asStateFlow()
-
     private val _allShelves = MutableStateFlow<List<Shelf>>(emptyList())
     val allShelves: StateFlow<List<Shelf>> = _allShelves.asStateFlow()
 
     private val _allShelfBooks = MutableStateFlow<List<ShelfBook>>(emptyList())
     val allShelfBooks = _allShelfBooks.asStateFlow()
+    private val _aiMessages = MutableStateFlow<List<AiMessage>>(emptyList())
+    val aiMessages: StateFlow<List<AiMessage>> = _aiMessages.asStateFlow()
+
+    private val _aiIsThinking = MutableStateFlow(false)
+    val aiIsThinking: StateFlow<Boolean> = _aiIsThinking.asStateFlow()
+
+    private val _guessedBook = MutableStateFlow<Book?>(null)
+    val guessedBook: StateFlow<Book?> = _guessedBook.asStateFlow()
+
+    private val _recommandedBooks = MutableStateFlow<List<Book>>(emptyList())
+    val recommandedBooks: StateFlow<List<Book>> = _recommandedBooks.asStateFlow()
+
+    private val conversationHistory = mutableListOf<Content>()
+
+
+    init {
+        loadBooks()
+        loadAuthors()
+        loadGenres()
+        loadReviews()
+        loadUsers()
+        loadComments()
+        loadAllShelfData()
+    }
 
     fun loadBooks() {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                val snapshot = db.collection("books").get().await()
-                val booksList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Book::class.java)?.apply {
-                        id_book = doc.id
-                    }
+                val result = bookRepository.getAllBooks()
+                if (result.isSuccess) {
+                    _books.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Books loaded: ${_books.value}")
                 }
-                _books.value = booksList
-                Log.d("BookViewModel", "Books loaded: $booksList")
             } catch (e: Exception) {
                 _error.value = "Failed to load books: ${e.message}"
                 Log.e("BookViewModel", "Error loading books", e)
@@ -325,14 +353,12 @@ class BookViewModel : ViewModel() {
     fun loadAuthors() {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("authors").get().await()
-                val authorsList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Author::class.java)?.apply {
-                        id_author = doc.id
-                    }
+                _isLoading.value = true
+                val result = authorRepository.getAllAuthors()
+                if (result.isSuccess) {
+                    _authors.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Authors loaded: ${_authors.value}")
                 }
-                _authors.value = authorsList
-                Log.d("BookViewModel", "Authors loaded: $authorsList")
             } catch (e: Exception) {
                 _error.value = "Failed to load authors: ${e.message}"
                 Log.e("BookViewModel", "Error loading authors", e)
@@ -343,14 +369,12 @@ class BookViewModel : ViewModel() {
     fun loadGenres() {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("genres").get().await()
-                val genresList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Genre::class.java)?.apply {
-                        id_genre = doc.id
-                    }
+                _isLoading.value = true
+                val result = genreRepository.getAllGenres()
+                if (result.isSuccess) {
+                    _genres.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Genres loaded: ${_genres.value}")
                 }
-                _genres.value = genresList
-                Log.d("BookViewModel", "Genres loaded: $genresList")
             } catch (e: Exception) {
                 _error.value = "Failed to load genres: ${e.message}"
                 Log.e("BookViewModel", "Error loading genres", e)
@@ -361,14 +385,12 @@ class BookViewModel : ViewModel() {
     fun loadReviews() {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("reviews").get().await()
-                val reviewsList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Review::class.java)?.apply {
-                        id_review = doc.id
-                    }
+                _isLoading.value = true
+                val result = reviewRepository.getAllReviews()
+                if (result.isSuccess) {
+                    _reviews.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Reviews loaded: ${_reviews.value}")
                 }
-                _reviews.value = reviewsList
-                Log.d("BookViewModel", "Reviews loaded: $reviewsList")
             } catch (e: Exception) {
                 _error.value = "Failed to load reviews: ${e.message}"
                 Log.e("BookViewModel", "Error loading reviews", e)
@@ -379,14 +401,12 @@ class BookViewModel : ViewModel() {
     fun loadUsers() {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("users").get().await()
-                val usersList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(User::class.java)?.apply {
-                        id_user = doc.id
-                    }
+                _isLoading.value = true
+                val result = userRepository.getAllUsers()
+                if (result.isSuccess) {
+                    _users.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Users loaded: ${_users.value}")
                 }
-                _users.value = usersList
-                Log.d("BookViewModel", "Users loaded: $usersList")
             } catch (e: Exception) {
                 _error.value = "Failed to load users: ${e.message}"
                 Log.e("BookViewModel", "Error loading users", e)
@@ -397,14 +417,12 @@ class BookViewModel : ViewModel() {
     fun loadComments() {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("comments").get().await()
-                val commentsList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Comment::class.java)?.apply {
-                        id_comment = doc.id
-                    }
+                _isLoading.value = true
+                val result = commentRepository.getAllComments()
+                if (result.isSuccess) {
+                    _comments.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Comments loaded: ${_comments.value}")
                 }
-                _comments.value = commentsList
-                Log.d("BookViewModel", "Comments loaded: $commentsList")
             } catch (e: Exception) {
                 _error.value = "Failed to load comments: ${e.message}"
                 Log.e("BookViewModel", "Error loading comments", e)
@@ -412,44 +430,17 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun loadAuthorById(authorId: String) {
-        viewModelScope.launch {
-            try {
-                _currentAuthor.value = null
-                val doc = db.collection("authors").document(authorId).get().await()
-                _currentAuthor.value = doc.toObject(Author::class.java)?.apply {
-                    id_author = doc.id
-                }
-            } catch (e: Exception) {
-                _error.value = "Failed to load author: ${e.message}"
-                Log.e("BookViewModel", "Error loading author", e)
-            }
-        }
-    }
-
-    fun loadGenreById(genreId: String) {
-        viewModelScope.launch {
-            try {
-                _currentGenre.value = null
-                val doc = db.collection("genres").document(genreId).get().await()
-                _currentGenre.value = doc.toObject(Genre::class.java)?.apply {
-                    id_genre = doc.id
-                }
-            } catch (e: Exception) {
-                _error.value = "Failed to load genre: ${e.message}"
-                Log.e("BookViewModel", "Error loading genre", e)
-            }
-        }
-    }
-
     fun loadAllShelfData() {
         viewModelScope.launch {
             try {
-                val shelvesSnapshot = db.collection("shelves").get().await()
-                _allShelves.value = shelvesSnapshot.toObjects(Shelf::class.java)
-
-                val shelfBooksSnapshot = db.collection("shelf_books").get().await()
-                _allShelfBooks.value = shelfBooksSnapshot.toObjects(ShelfBook::class.java)
+                val shelvesResult = shelfRepository.getAllShelves()
+                val shelfBooksResult = shelfRepository.getAllShelfBooks()
+                if (shelvesResult.isSuccess) {
+                    _allShelves.value = shelvesResult.getOrNull() ?: emptyList()
+                }
+                if (shelfBooksResult.isSuccess) {
+                    _allShelfBooks.value = shelfBooksResult.getOrNull() ?: emptyList()
+                }
             } catch (e: Exception) {
                 _error.value = "Failed to load shelf data: ${e.message}"
                 Log.e("BookViewModel", "Error while loading shelf data", e)
@@ -461,17 +452,11 @@ class BookViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _currentBookReviews.value = emptyList()
-                val snapshot = db.collection("reviews")
-                    .whereEqualTo("id_book", bookId)
-                    .get()
-                    .await()
-                val reviewList = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Review::class.java)?.apply {
-                        id_review = doc.id
-                    }
+                val result = reviewRepository.getBookReviews(bookId)
+                if (result.isSuccess) {
+                    _currentBookReviews.value = result.getOrNull() ?: emptyList()
+                    Log.d("BookViewModel", "Reviews loaded: ${_currentBookReviews.value}")
                 }
-                _currentBookReviews.value = reviewList
-                Log.d("BookViewModel", "Reviews for book loaded: $reviewList")
             } catch (e: Exception) {
                 _error.value = "Failed to load reviews for book: ${e.message}"
                 Log.e("BookViewModel", "Error loading reviews for book", e)
@@ -482,12 +467,10 @@ class BookViewModel : ViewModel() {
     fun addBookToShelf(userId: String, shelfId: String, bookId: String) {
         viewModelScope.launch {
             try {
-                val shelfBook = ShelfBook(
-                    id_shelf = shelfId,
-                    id_book = bookId
-                )
-                db.collection("shelf_books").add(shelfBook).await()
-                Log.d("AuthViewModel", "Book added to shelf")
+                val result = shelfRepository.addBookToShelf(shelfId, bookId)
+                if (result.isSuccess) {
+                    Log.d("BookViewModel", "Book added to shelf")
+                }
             } catch (e: Exception) {
                 _error.value = "Failed to add book to shelf: ${e.message}"
                 Log.e("AuthViewModel", "Error adding book to shelf", e)
@@ -498,19 +481,14 @@ class BookViewModel : ViewModel() {
     fun addReview(userId: String, bookId: String, rating: Int, comment: String) {
         viewModelScope.launch {
             try {
-                val review = Review(
-                    id_user = userId,
-                    id_book = bookId,
-                    rating = rating,
-                )
-                val reviewRef = db.collection("reviews").add(review).await()
-                if (comment.isNotEmpty()) {
+                val review = Review(id_user = userId, id_book = bookId, rating = rating)
+                val result = reviewRepository.addReview(review)
+                if (result.isSuccess && comment.isNotEmpty()) {
                     val commentObj = Comment(
-                        id_review = reviewRef.id,
+                        id_review = result.getOrNull()!!,
                         content = comment
                     )
-                    db.collection("comments").add(commentObj).await()
-
+                    commentRepository.addComment(commentObj)
                 }
                 loadReviewsForBook(bookId)
                 loadComments()
@@ -530,20 +508,8 @@ class BookViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
-                val oldRelation = db.collection("shelf_books")
-                    .whereEqualTo("id_shelf", oldShelfId)
-                    .whereEqualTo("id_book", bookId)
-                    .get()
-                    .await()
-                for (doc in oldRelation.documents) {
-                    db.collection("shelf_books").document(doc.id).delete().await()
-                }
-
-                val newShlefBook = ShelfBook(
-                    id_shelf = newShelfId,
-                    id_book = bookId
-                )
-                db.collection("shelf_books").add(newShlefBook).await()
+                shelfRepository.removeBookFromShelf(oldShelfId, bookId)
+                shelfRepository.addBookToShelf(newShelfId, bookId)
                 Log.d("BookViewModel", "Book moved from ${oldShelfId} to ${newShelfId}")
             } catch (e: Exception) {
                 _error.value = "Failed to move book: ${e.message}"
@@ -555,12 +521,7 @@ class BookViewModel : ViewModel() {
 
     suspend fun getShelfForBook(bookId: String, userShelfIds: List<String>): String? {
         return try {
-            val snapshot = db.collection("shelf_books")
-                .whereEqualTo("id_book", bookId)
-                .whereIn("id_shelf", userShelfIds)
-                .get()
-                .await()
-            snapshot.documents.firstOrNull()?.getString("id_shelf")
+            return shelfRepository.getShelfForBook(bookId, userShelfIds).getOrNull()
         } catch (e: Exception) {
             null
         }
@@ -611,10 +572,200 @@ class BookViewModel : ViewModel() {
             }
         }
     }
+
+    fun loadAiHistory(userId: String) {
+        viewModelScope.launch {
+            conversationHistory.clear()
+            val result = aiChatRepository.loadHistory(userId)
+            if (result.isSuccess) {
+                val interactions = result.getOrNull() ?: emptyList()
+                if (interactions.isEmpty()) {
+                    startNewAiGame(userId)
+                } else {
+                    val messages = mutableListOf<AiMessage>()
+                    messages.add(
+                        AiMessage(
+                            id = "Welcome",
+                            content = "Bună! 📚 Gândește-te la o carte și descrie-mi-o — " +
+                                    "personaje, poveste, atmosferă, orice vrei. " +
+                                    "Eu voi încerca să ghicesc despre ce carte e vorba!",
+                            isFromAi = true,
+                            timestamp = 0L
+                        )
+                    )
+
+                    interactions.forEach { interaction ->
+                        messages.add(
+                            AiMessage(
+                                id = interaction.id_chat_interactions + "_user",
+                                content = interaction.messageUser,
+                                isFromAi = false,
+                                timestamp = interaction.generationDate.toDate().time
+                            )
+                        )
+                        messages.add(
+                            AiMessage(
+                                id = interaction.id_chat_interactions + "_ai",
+                                content = interaction.messageChatbot,
+                                isFromAi = true,
+                                timestamp = interaction.generationDate.toDate().time
+                            )
+                        )
+
+                        conversationHistory.add(
+                            content(role = "user") { text(interaction.messageUser) }
+                        )
+                        conversationHistory.add(
+                            content(role = "model") { text(interaction.messageChatbot) }
+                        )
+                    }
+                    _aiMessages.value = messages
+                }
+            } else {
+                startNewAiGame(userId)
+            }
+        }
+    }
+
+    fun startNewAiGame(userId: String) {
+        viewModelScope.launch {
+            aiChatRepository.clearHistory(userId)
+            conversationHistory.clear()
+            _guessedBook.value = null
+            _aiMessages.value = listOf(
+                AiMessage(
+                    id = "welcome",
+                    content = "Bună! 📚 Gândește-te la o carte și descrie-mi-o — " +
+                            "personaje, poveste, atmosferă, orice vrei. " +
+                            "Eu voi încerca să ghicesc despre ce carte e vorba!",
+                    isFromAi = true,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun sendAiMessage(userMessage: String, userId: String) {
+        if (userMessage.isBlank()) return
+
+        val userMsg = AiMessage(
+            id = System.currentTimeMillis().toString(),
+            content = userMessage,
+            isFromAi = false,
+            timestamp = System.currentTimeMillis()
+        )
+
+        _aiMessages.value = _aiMessages.value + userMsg
+
+        viewModelScope.launch {
+            _aiIsThinking.value = true
+            val streamingId = (System.currentTimeMillis() + 1).toString()
+            _aiMessages.value = _aiMessages.value + AiMessage(
+                id = streamingId,
+                content = "",
+                isFromAi = true,
+                timestamp = System.currentTimeMillis() + 1
+            )
+
+            try {
+                val catalog = _books.value.joinToString("\n") {
+                    "- Titlu: ${it.title}, ID ${it.id_book}"
+                }
+
+                val systemPrompt = """
+                    Ești un detectiv de cărți strict limitat la catalogul pus la dispoziție.
+                    
+                    CATALOG DISPONIBIL:
+                    $catalog
+                    
+                    REGULI CRITICE:
+                    1. NU AI VOIE să ghicești nicio carte care NU se află în lista de mai sus.
+                    2. Dacă utilizatorul descrie o carte care nu este în catalogul meu, răspunde: "Din păcate, această carte nu se află în biblioteca mea momentan. Încearcă să descrii o altă carte!"
+                    3. Analizează indiciile (gen, atmosferă) și compară-le DOAR cu elementele din catalog.
+                    4. Când ești sigur, răspunde exact: "Am ghicit! Cred că este: [Titlu] 🎉\nBOOK_ID:[ID]"
+                    5. Dacă sunt mai multe variante posibile din catalog, pune întrebări suplimentare pentru a elimina opțiunile greșite.
+                """.trimIndent()
+
+                val generativeModel = GenerativeModel(
+                    modelName = "gemini-2.5-flash",
+                    apiKey = com.example.bookish.BuildConfig.GEMINI_API_KEY,
+                    systemInstruction = content { text(systemPrompt) }
+                )
+
+                val chat = generativeModel.startChat(history = conversationHistory)
+
+                var fullResponse = ""
+                chat.sendMessageStream(userMessage).collect { chunk ->
+                    chunk.text?.let { chunkText ->
+                        fullResponse += chunkText
+                        val displayText = fullResponse
+                            .replace(Regex("BOOK_ID:.*"), "")
+                            .trim()
+                        _aiMessages.value = _aiMessages.value.map { msg ->
+                            if (msg.id == streamingId) {
+                                msg.copy(content = displayText, isStreaming = true)
+                            } else msg
+                        }
+                    }
+                }
+
+                val finalDisplayText = fullResponse
+                    .replace(Regex("BOOK+ID:.*"), "")
+                    .trim()
+                _aiMessages.value = _aiMessages.value.map { msg ->
+                    if (msg.id == streamingId) {
+                        msg.copy(content = finalDisplayText, isStreaming = true)
+                    } else msg
+                }
+
+                conversationHistory.add(content(role = "user") { text(userMessage) })
+                conversationHistory.add(content(role = "model") { text(fullResponse) })
+
+                aiChatRepository.saveInteractions(
+                    ChatInteractions(
+                        id_user = userId,
+                        messageUser = userMessage,
+                        messageChatbot = finalDisplayText,
+                        generationDate = Timestamp.now()
+                    )
+                )
+
+                if (fullResponse.contains("BOOK_ID:")) {
+                    val bookId = fullResponse
+                        .substringAfter("BOOK_ID:")
+                        .trim()
+                        .split("\n")[0]
+                        .trim()
+                    val foundBook = _books.value.find { it.id_book == bookId }
+                    _guessedBook.value = foundBook
+                }
+                Log.d("AI_DEBUG", "Full response: $fullResponse")
+            } catch (e: Exception) {
+                _aiMessages.value = _aiMessages.value.map { msg ->
+                    if (msg.id == streamingId) {
+                        msg.copy(
+                            content = "Am întâmpinat o eroare. Încearcă din nou!",
+                            isStreaming = false
+                        )
+                    } else msg
+                }
+                Log.e("AI_CHAT", "Streaming error: ${e.message}", e)
+            } finally {
+                _aiIsThinking.value = false
+            }
+        }
+    }
+
+    fun resetAiGame(userId: String) {
+        startNewAiGame(userId)
+    }
 }
 
 class SocialViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
+    private val friendshipRepository = FriendshipRepository()
+    private val messageRepository = MessageRepository()
+    private val userRepository = UserRepository()
+    private val bookClubRepository = BookClubRepository()
 
     private val _friends = MutableStateFlow<List<User>>(emptyList())
     val friends = _friends.asStateFlow()
@@ -642,78 +793,22 @@ class SocialViewModel : ViewModel() {
 
     fun loadSocialData(currentUserId: String) {
         viewModelScope.launch {
-            val friendships1 = db.collection("friendships")
-                .whereEqualTo("id_user1", currentUserId)
-                .whereEqualTo("status", "accepted")
-                .get()
-                .await()
-
-            val friendships2 = db.collection("friendships")
-                .whereEqualTo("id_user2", currentUserId)
-                .whereEqualTo("status", "accepted")
-                .get()
-                .await()
-
-            val friendIds = mutableSetOf<String>()
-            friendships1.documents.forEach { doc ->
-                doc.toObject(Friendship::class.java)?.id_user2?.let {
-                    friendIds.add(it)
-                }
-            }
-            friendships2.documents.forEach { doc ->
-                doc.toObject(Friendship::class.java)?.id_user1?.let {
-                    friendIds.add(it)
-                }
-            }
-
+            val friendIdsResult = friendshipRepository.getAcceptedFriendIds(currentUserId)
+            val friendIds = friendIdsResult.getOrNull() ?: emptySet()
             val friendsList = friendIds.mapNotNull { friendId ->
-                db.collection("users")
-                    .document(friendId)
-                    .get()
-                    .await()
-                    .toObject(User::class.java)
+                userRepository.getUserById(friendId).getOrNull()
             }
             _friends.value = friendsList
 
-            val requests = db.collection("friendships")
-                .whereEqualTo("id_user2", currentUserId)
-                .whereEqualTo("status", "pending")
-                .get()
-                .await()
-
-            val requesterIds = requests.documents.mapNotNull { doc ->
-                doc.toObject(Friendship::class.java)?.id_user1
-            }
-
+            val requesterIdsResult = friendshipRepository.getPendingRequestsForUser(currentUserId)
+            val requesterIds = requesterIdsResult.getOrNull() ?: emptyList()
             val requestersList = requesterIds.mapNotNull { requesterId ->
-                db.collection("users")
-                    .document(requesterId)
-                    .get()
-                    .await()
-                    .toObject(User::class.java)
+                userRepository.getUserById(requesterId).getOrNull()
             }
             _pendingRequests.value = requestersList
 
-            val memberships = db.collection("book_club_members")
-                .whereEqualTo("id_user", currentUserId)
-                .whereEqualTo("status", "active")
-                .get()
-                .await()
-
-            val clubIds = memberships.documents.mapNotNull {
-                it.getString("id_book_club")
-            }
-
-            if (clubIds.isNotEmpty()) {
-                val clubsList = clubIds.mapNotNull { clubId ->
-                    db.collection("book_clubs")
-                        .document(clubId)
-                        .get()
-                        .await()
-                        .toObject(BookClub::class.java)
-                }
-                _myBookClubs.value = clubsList
-            }
+            val clubsResult = bookClubRepository.getClubsForUser(currentUserId)
+            _myBookClubs.value = clubsResult.getOrNull() ?: emptyList()
 
             loadSentRequests(currentUserId)
 
@@ -750,8 +845,11 @@ class SocialViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                db.collection("private_messages").add(message).await()
-                Log.d("SocialViewModel", "Private message send successfully")
+                val result = messageRepository.sendPrivateMessage(message)
+                if (!result.isSuccess) {
+                    _privateMessages.value = _privateMessages.value.dropLast(1)
+                    Log.e("SocialViewModel", "Error sending private message")
+                }
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error sending private message", e)
             }
@@ -764,46 +862,39 @@ class SocialViewModel : ViewModel() {
         text: String,
         bookId: String = ""
     ) {
-
         val message = GroupMessage(
             id_bookClub = clubId,
             id_user = userId,
             content = text,
-            id_book = bookId
+            id_book = bookId,
+            sendingDate = Timestamp.now()
         )
-
         _groupMessages.value = _groupMessages.value + message
 
         viewModelScope.launch {
             try {
-                db.collection("group_messages").add(message).await()
-                Log.d("SocialViewModel", "Group message send successfully")
+                val result = messageRepository.sendGroupMessage(message)
+                if (!result.isSuccess) {
+                    _groupMessages.value = _groupMessages.value.dropLast(1)
+                    Log.e("SocialViewModel", "Error sending group message")
+                }
             } catch (e: Exception) {
+                _groupMessages.value = _groupMessages.value.dropLast(1)
                 Log.e("SocialViewModel", "Error sending group message", e)
             }
-
         }
     }
 
     fun acceptFriendRequest(currentUserId: String, requesterId: String) {
         viewModelScope.launch {
             try {
-                val query = db.collection("friendships")
-                    .whereEqualTo("id_user1", requesterId)
-                    .whereEqualTo("id_user2", currentUserId)
-                    .whereEqualTo("status", "pending")
-                    .get()
-                    .await()
-
-                for (documn in query.documents) {
-                    db.collection("friendships")
-                        .document(documn.id)
-                        .update("status", "accepted")
-                        .await()
+                val result = friendshipRepository.acceptFriendRequestByUsers(
+                    requesterId, currentUserId
+                )
+                if (result.isSuccess) {
+                    loadSocialData(currentUserId)
+                    Log.d("SocialViewModel", "Friend request accepted")
                 }
-
-                loadSocialData(currentUserId)
-                Log.d("SocialViewModel", "Friend request accepted")
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error accepting friend request", e)
             }
@@ -813,21 +904,11 @@ class SocialViewModel : ViewModel() {
     fun declineFriendRequest(currentUserId: String, requesterId: String) {
         viewModelScope.launch {
             try {
-                val query = db.collection("friendships")
-                    .whereEqualTo("id_user1", requesterId)
-                    .whereEqualTo("id_user2", currentUserId)
-                    .whereEqualTo("status", "pending")
-                    .get()
-                    .await()
-
-                for (document in query.documents) {
-                    db.collection("friendships")
-                        .document(document.id)
-                        .delete()
-                        .await()
+                val result = friendshipRepository.declineFriendRequest(requesterId, currentUserId)
+                if (result.isSuccess) {
+                    loadSocialData(currentUserId)
+                    Log.d("SocialViewModel", "Friend request declined")
                 }
-                loadSocialData(currentUserId)
-                Log.d("SocialViewModel", "Friend request declined")
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error declining friend request", e)
             }
@@ -839,19 +920,14 @@ class SocialViewModel : ViewModel() {
             _searchResults.value = emptyList()
             return
         }
-
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("users")
-                    .whereGreaterThanOrEqualTo("username", query)
-                    .whereLessThanOrEqualTo("username", query + "\uf8ff")
-                    .get()
-                    .await()
-
-                _searchResults.value = snapshot.toObjects(User::class.java)
-                Log.d("SocialViewModel", "Search results: ${_searchResults.value}")
+                val result = userRepository.searchUsers(query)
+                if (result.isSuccess) {
+                    _searchResults.value = result.getOrNull() ?: emptyList()
+                }
             } catch (e: Exception) {
-                Log.e("SocialViewModel", "Error searching users")
+                Log.e("SocialViewModel", "Error searching users", e)
             }
         }
     }
@@ -865,9 +941,11 @@ class SocialViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                db.collection("friendships").add(newFriendship).await()
-                _sentRequests.value = _sentRequests.value + receiverId
-                Log.d("SocialViewModel", "Friend request sent")
+                val result = friendshipRepository.sendFriendRequest(senderId, receiverId)
+                if (result.isSuccess) {
+                    _sentRequests.value = _sentRequests.value + receiverId
+                    Log.d("SocialViewModel", "Friend request sent")
+                }
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error sending friend request", e)
             }
@@ -875,26 +953,20 @@ class SocialViewModel : ViewModel() {
     }
 
     fun listenForMessages(currentUserId: String, chatPartnerId: String) {
-        val convId = getConversationId(currentUserId, chatPartnerId)
+        val convId = if (currentUserId < chatPartnerId)
+            "${currentUserId}_$chatPartnerId"
+        else
+            "${chatPartnerId}_$currentUserId"
 
         privateMessagesListener?.remove()
         privateMessagesListener = null
         _privateMessages.value = emptyList()
 
-
-        privateMessagesListener = db.collection("private_messages")
-            .whereEqualTo("conversationId", convId) // Filtrare ultra-rapidă
-            .orderBy("sendingDate", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("CHAT_ERROR", "Listen failed: ${e.message}")
-                    return@addSnapshotListener
-                }
-
-                val list = snapshot?.toObjects(PrivateMessage::class.java) ?: emptyList()
-                _privateMessages.value = list
-                Log.d("CHAT_DEBUG", "Am găsit ${list.size} mesaje pentru $convId")
-            }
+        privateMessagesListener = messageRepository.listenForPrivateMessages(
+            conversationId = convId,
+            onUpdate = { list -> _privateMessages.value = list },
+            onError = { e -> Log.e("CHAT_ERROR", "Listen failed: ${e.message}") }
+        )
     }
 
     override fun onCleared() {
@@ -905,32 +977,21 @@ class SocialViewModel : ViewModel() {
 
     fun listenForGroupMessages(clubId: String) {
         groupMessagesListener?.remove()
+        groupMessagesListener = null
+        _groupMessages.value = emptyList()
 
-        groupMessagesListener = db.collection("group_messages")
-            .whereEqualTo("id_bookClub", clubId)
-            .orderBy("sendingDate", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("CHAT_ERROR", "Listen failed: ${e.message}")
-                    return@addSnapshotListener
-                }
-                _groupMessages.value = snapshot?.toObjects(GroupMessage::class.java) ?: emptyList()
-            }
+        groupMessagesListener = messageRepository.listenForGroupMessages(
+            clubId = clubId,
+            onUpdate = { list -> _groupMessages.value = list },
+            onError = { e -> Log.e("GROUP_CHAT_ERROR", "Listen failed: ${e.message}") }
+        )
     }
 
     fun loadSentRequests(currentUserId: String) {
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("friendships")
-                    .whereEqualTo("id_user1", currentUserId)
-                    .whereEqualTo("status", "pending")
-                    .get()
-                    .await()
-
-                val ids = snapshot.documents.mapNotNull {
-                    it.toObject(Friendship::class.java)?.id_user2
-                }.toSet()
-                _sentRequests.value = ids
+                val result = friendshipRepository.getSentRequestsForUser(currentUserId)
+                _sentRequests.value = result.getOrNull() ?: emptySet()
             } catch (e: Exception) {
                 Log.e("SocialViewModel", "Error loading sent requests", e)
             }

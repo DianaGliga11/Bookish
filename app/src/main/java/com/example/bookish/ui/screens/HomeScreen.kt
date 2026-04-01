@@ -230,7 +230,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No treanding books yet", color = Color.Gray)
+                    Text("No trending books yet", color = Color.Gray)
                 }
             } else {
                 val trendingBooks = booksDisplay.sortedByDescending { it.reviewCount }.take(10)
