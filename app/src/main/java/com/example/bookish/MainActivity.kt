@@ -30,7 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,6 +51,7 @@ import com.example.bookish.ui.screens.HomeScreen
 import com.example.bookish.ui.screens.LoginScreen
 import com.example.bookish.ui.screens.ProfileScreen
 import com.example.bookish.ui.screens.RegisterScreen
+import com.example.bookish.ui.screens.SearchScreen
 import com.example.bookish.ui.screens.ShelfScreen
 import com.example.bookish.ui.screens.WelcomeScreen
 import com.example.bookish.viewmodel.AuthViewModel
@@ -176,14 +179,15 @@ fun BookishApp() {
 
         // Search Screen
         composable("search") {
-            PlaceholderScreen(
-                title = "Search",
-                subtitle = "Search for books, authors, and genres",
-                onBack = {
-                    navController.navigate("home") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                }
+            SearchScreen(
+                bookViewModel = bookViewModel,
+                onBookClick = { book ->
+                    selectedBook = book
+                    navController.navigate("bookDetails")
+                },
+                onBackClick = {
+                    navController.popBackStack()
+                },
             )
         }
 
@@ -293,7 +297,7 @@ fun BookishApp() {
 fun PlaceholderScreen(
     title: String,
     subtitle: String = "",
-    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Book,
+    icon: ImageVector = Icons.Default.Book,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -346,7 +350,7 @@ fun PlaceholderScreen(
                         text = subtitle,
                         fontSize = 14.sp,
                         color = Color.Gray,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))

@@ -19,8 +19,12 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlin.collections.mapOf
@@ -321,6 +325,19 @@ class BookViewModel : ViewModel() {
 
     private val conversationHistory = mutableListOf<Content>()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    val filteredBooks = _searchQuery.combine(_books){ query, allBooks ->
+        if(query.isBlank()){
+            emptyList()
+        }else{
+            allBooks.filter{
+                it.title.contains(query, ignoreCase = true) ||
+                        it.description.contains(query, ignoreCase = true)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         loadBooks()
@@ -758,6 +775,10 @@ class BookViewModel : ViewModel() {
 
     fun resetAiGame(userId: String) {
         startNewAiGame(userId)
+    }
+
+    fun onSearchQueryChanged(newQuery: String){
+        _searchQuery.value = newQuery
     }
 }
 
