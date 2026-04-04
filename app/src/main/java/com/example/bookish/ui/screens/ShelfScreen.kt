@@ -157,7 +157,7 @@ fun ShelfScreen(
 
     val db = FirebaseFirestore.getInstance()
 
-    val defaultShelfNames = listOf("Want to Read", "Reading", "Read")
+    val defaultShelfNames = listOf("Want to Read", "On Going", "Completed")
 
     LaunchedEffect(currentUser) {
         currentUser?.let { user ->
@@ -470,11 +470,20 @@ fun ShelfScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    item{
+                        Text(
+                            text = "Shelves",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                    }
                     items(userShelves.sortedBy {
                         when (it.name) {
                             "Want to Read" -> 0
-                            "Reading" -> 1
-                            "Read" -> 2
+                            "On Going" -> 1
+                            "Completed" -> 2
                             else -> 3
                         }
                     }) { shelf ->
@@ -1159,8 +1168,8 @@ private fun ShelfCard(
 
     val (shelfColor, shelfIcon) = when (shelf.name) {
         "Want to Read" -> Pair(Pink, Icons.Default.BookmarkAdd)
-        "Reading" -> Pair(Teal, Icons.Default.MenuBook)
-        "Read" -> Pair(Green, Icons.Default.CheckCircle)
+        "On Going" -> Pair(Teal, Icons.Default.MenuBook)
+        "Completed" -> Pair(Green, Icons.Default.CheckCircle)
         else -> Pair(Purple, Icons.Default.Star)
     }
 
@@ -1572,8 +1581,8 @@ private fun MoveBookDialog(
                         availableShalves.forEach { shelf ->
                             val (shelfColor, shelfIcon) = when (shelf.name) {
                                 "Want to Read" -> Pair(Pink, Icons.Default.BookmarkAdd)
-                                "Reading..." -> Pair(Teal, Icons.Default.MenuBook)
-                                "Read" -> Pair(Green, Icons.Default.CheckCircle)
+                                "On Going..." -> Pair(Teal, Icons.Default.MenuBook)
+                                "Completed" -> Pair(Green, Icons.Default.CheckCircle)
                                 else -> Pair(Purple, Icons.Default.Star)
                             }
                             Surface(
