@@ -271,9 +271,9 @@ class BookViewModel : ViewModel() {
     private val commentRepository = CommentRepository()
     private val authorRepository = AuthorRepository()
     private val genreRepository = GenreRepository()
-
     private val aiChatRepository = AIChatRepository()
 
+    private val bookClubRepository = BookClubRepository()
     private val _books = MutableStateFlow<List<Book>>(emptyList())
     val books: StateFlow<List<Book>> = _books.asStateFlow()
 
@@ -339,6 +339,8 @@ class BookViewModel : ViewModel() {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _popularClubs = MutableStateFlow<List<BookClub>>(emptyList())
+    val popularClubs : StateFlow<List<BookClub>> = _popularClubs.asStateFlow()
     init {
         loadBooks()
         loadAuthors()
@@ -779,6 +781,33 @@ class BookViewModel : ViewModel() {
 
     fun onSearchQueryChanged(newQuery: String){
         _searchQuery.value = newQuery
+    }
+
+    fun loadPopularClubs() {
+        viewModelScope.launch {
+            val result = bookClubRepository.getPopularBookClubs(10)
+            if (result.isSuccess) {
+                _popularClubs.value = result.getOrNull() ?: emptyList()
+            }
+        }
+    }
+
+    fun joinBookClub(userId: String, clubId: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            val result = bookClubRepository.addUserToClub(userId, clubId)
+
+            result.onSuccess {
+                Log.d("JOIN_CLUB", "Successfully joined club: $clubId")
+                loadPopularClubs()
+            }.onFailure { exception ->
+                _error.value = "Failed to join club: ${exception.message}"
+                Log.e("JOIN_CLUB", "Error: ${exception.message}")
+            }
+
+            _isLoading.value = false
+        }
     }
 }
 

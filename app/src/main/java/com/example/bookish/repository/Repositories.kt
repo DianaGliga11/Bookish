@@ -699,6 +699,54 @@ class BookClubRepository {
             Result.failure(e)
         }
     }
+
+    suspend fun getPopularBookClubs(limit: Int = 10): Result<List<BookClub>> {
+        return try {
+            val snapshot = db.collection("book_clubs")
+                // .orderBy("memberCount", Query.Direction.DESCENDING) // Opțional, dacă ai câmpul
+                .limit(limit.toLong())
+                .get()
+                .await()
+
+            val clubs = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(BookClub::class.java)?.apply { id_book_club = doc.id }
+
+            }
+            Result.success(clubs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getMemberCount(clubId: String): Int {
+        return try {
+            val snapshot = db.collection("book_club_members")
+                .whereEqualTo("id_book_club", clubId)
+                .whereEqualTo("status", "active")
+                .get()
+                .await()
+            snapshot.size()
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    suspend fun addUserToClub(userId: String, clubId: String): Result<Unit> {
+        return try {
+            val memberData = hashMapOf(
+                "id_user" to userId,
+                "id_book_club" to clubId,
+                "role" to "member",
+                "status" to "active",
+                "joinedAt" to com.google.firebase.Timestamp.now()
+            )
+
+            db.collection("book_club_members").add(memberData).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
 
 class AIChatRepository{

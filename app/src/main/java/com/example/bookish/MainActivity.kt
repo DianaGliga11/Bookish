@@ -156,6 +156,9 @@ fun BookishApp() {
                 onNavigateToProfile = {
                     navController.navigate("profile")
                 },
+                onClubClick = {club ->
+                    navController.navigate("club_details/${club.id_book_club}")
+                },
                 bookViewModel = bookViewModel,
                 authViewModel = authViewModel
             )

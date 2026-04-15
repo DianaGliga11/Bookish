@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.example.bookish.models.Book
+import com.example.bookish.models.BookClub
 import com.example.bookish.viewmodel.AuthViewModel
 import com.example.bookish.viewmodel.BookViewModel
 import com.example.bookish.viewmodel.UserState
@@ -79,6 +81,7 @@ fun HomeScreen(
     onNavigateToFriends: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToAI: () -> Unit,
+    onClubClick: (BookClub) -> Unit,
     bookViewModel: BookViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel()
 
@@ -133,12 +136,34 @@ fun HomeScreen(
         }.take(10)
     }
 
+    val popularClubs by bookViewModel.popularClubs.collectAsState()
+    var showJoinDialog by remember { mutableStateOf(false) }
+    var selectedClubForJoin by remember { mutableStateOf<BookClub?>(null) }
+
+    if (showJoinDialog && selectedClubForJoin != null) {
+        JoinClubDialog(
+            clubName = selectedClubForJoin!!.name,
+            onConfirm = {
+                val userState = currentUserState as? UserState.Success
+                if (userState != null) {
+                    bookViewModel.joinBookClub(
+                        userId = userState.user.id_user,
+                        clubId = selectedClubForJoin!!.id_book_club
+                    )
+                }
+                showJoinDialog = false
+            },
+            onDismiss = { showJoinDialog = false }
+        )
+    }
+
     LaunchedEffect(Unit) {
         bookViewModel.loadBooks()
         bookViewModel.loadAuthors()
         bookViewModel.loadGenres()
         bookViewModel.loadReviews()
         bookViewModel.loadAllShelfData()
+        bookViewModel.loadPopularClubs()
     }
 
     LaunchedEffect(currentUserState, books, reviews) {
@@ -188,17 +213,44 @@ fun HomeScreen(
         ) {
             HomeHeader(username = username)
 
-            if (aiRecommendations.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Your Recommendations",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF9C27B0),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionTitle(title = "Trending Now")
 
-                Spacer(modifier = Modifier.height(16.dp))
+            if (trendingBooks.isEmpty()) {
+                EmptyStateText("No trending books yet")
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(trendingBooks) { bookData ->
+                        BookCard(bookData = bookData, onClick = { onBookClick(bookData.book) })
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            SectionTitle(title = "Popular Book Clubs")
+
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(popularClubs) { club ->
+                    ClubCard(
+                        name = club.name,
+                        description = club.description,
+                        onClick = {
+                            selectedClubForJoin = club
+                            showJoinDialog = true
+                        }
+                    )
+                }
+            }
+
+            if (aiRecommendations.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(32.dp))
+                SectionTitle(title = "Recommended For You", color = Color(0xFF9C27B0))
 
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -212,42 +264,152 @@ fun HomeScreen(
                     }
                 }
             }
-
-
             Spacer(modifier = Modifier.height(32.dp))
-            Text(
-                text = "Trending now",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (trendingBooks.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No trending books yet", color = Color.Gray)
-                }
-            } else {
-                val trendingBooks = booksDisplay.sortedByDescending { it.reviewCount }.take(10)
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(trendingBooks) { bookData ->
-                        BookCard(
-                            bookData = bookData,
-                            onClick = { onBookClick(bookData.book) }
-                        )
-                    }
-                }
-            }
         }
     }
+}
+
+@Composable
+fun JoinClubDialog(clubName: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Join Club") },
+        text = { Text("Do you want to join \"$clubName\" and participate in the group chat?") },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                Text("Join", color = Color(0xFFFF69B4))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun ClubCard(
+    name: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(180.dp)
+            .height(220.dp)
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF69B4).copy(alpha = 0.1f)), // Roz pal
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = name.take(1).uppercase(),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFF69B4),
+                        fontSize = 18.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = Color.Black,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.LightGray.copy(alpha = 0.5f))
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "About this club:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Gray,
+                letterSpacing = 0.5.sp
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = description,
+                fontSize = 13.sp,
+                color = Color(0xFF424242),
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Normal
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Text(
+                text = "Tap to join →",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF69B4),
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyStateText(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color.Gray
+        )
+    }
+}
+
+@Composable
+fun SectionTitle(title: String, color: Color = Color.Black) {
+    Text(
+        text = title,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    )
 }
 
 @Composable
