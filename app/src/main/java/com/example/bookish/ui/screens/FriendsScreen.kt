@@ -241,7 +241,7 @@ fun SearchResultItem(
     requestSent: Boolean,
     hasPendingRequest: Boolean,
     onSendRequest: () -> Unit,
-    onAcceptRequest: () -> Unit?,
+    onAcceptRequest: () -> Unit,
     onOpenChat: () -> Unit
 ) {
     Card(
@@ -287,6 +287,16 @@ fun SearchResultItem(
                     IconButton(onClick = onOpenChat) {
                         Icon(
                             imageVector = Icons.Default.Chat,
+                            contentDescription = "Accept",
+                            tint = Green
+                        )
+                    }
+                }
+
+                hasPendingRequest -> {
+                    IconButton(onClick = {onAcceptRequest()}){
+                        Icon(
+                            imageVector = Icons.Default.Check,
                             contentDescription = "Accept",
                             tint = Green
                         )

@@ -983,16 +983,11 @@ class SocialViewModel : ViewModel() {
     }
 
     fun sendFriendRequest(senderId: String, receiverId: String) {
-        val newFriendship = Friendship(
-            id_user1 = senderId,
-            id_user2 = receiverId,
-            status = "pending"
-        )
-
         viewModelScope.launch {
             try {
                 val result = friendshipRepository.sendFriendRequest(senderId, receiverId)
                 if (result.isSuccess) {
+                    // ← Asta trebuie să existe:
                     _sentRequests.value = _sentRequests.value + receiverId
                     Log.d("SocialViewModel", "Friend request sent")
                 }

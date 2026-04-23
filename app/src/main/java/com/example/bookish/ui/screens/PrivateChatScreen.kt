@@ -98,7 +98,7 @@ fun ChatScreen(
 
     val myReadBooks = remember(allShelfBooks, allShelves, allBooks) {
         val readShelfId =
-            allShelves.find { it.id_user == currentUser?.id_user && it.name == "Read" }?.id_shelf
+            allShelves.find { it.id_user == currentUser?.id_user && it.name == "Completed" }?.id_shelf
         allShelfBooks.filter { it.id_shelf == readShelfId }
             .mapNotNull { sb -> allBooks.find { it.id_book == sb.id_book } }
     }

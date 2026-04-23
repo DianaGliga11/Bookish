@@ -125,7 +125,7 @@ fun HomeScreen(
     }
 
     val trendingBooks = remember(booksDisplay, shelves, shelfBooks) {
-        val readShelfIds = shelves.filter { it.name.equals("Read", ignoreCase = true) }
+        val readShelfIds = shelves.filter { it.name.equals("Completed", ignoreCase = true) }
             .map { it.id_shelf }
         val bookReadCounts = shelfBooks.filter { it.id_shelf in readShelfIds }
             .groupBy { it.id_book }
