@@ -168,15 +168,13 @@ fun HomeScreen(
 
     LaunchedEffect(currentUserState, books, reviews) {
         val userSuccess = currentUserState as? UserState.Success
-        val currentUserId = userSuccess?.user?.id_user
-
-        val userReviews = reviews.filter { it.id_user == currentUserId }
-
-        //Log.d("AI_DEBUG", "Status: Books=${books.size}, TotalReviews=${reviews.size}, UserReviews=${userReviews.size}")
-
-        if (userSuccess != null && books.isNotEmpty() && userReviews.isNotEmpty()) {
-            //Log.d("AI_DEBUG", "Condiții OK! Pornesc AI pentru ${userSuccess.user.username}")
-            bookViewModel.generateAIRecommendations(userSuccess.user, books, userReviews)
+        if (userSuccess != null && books.isNotEmpty()) {
+            // Schimbăm apelul de la AI la manual
+            bookViewModel.generateManualRecommendations(
+                user = userSuccess.user,
+                allBooks = books,
+                userReviews = reviews.filter { it.id_user == userSuccess.user.id_user }
+            )
         }
     }
 

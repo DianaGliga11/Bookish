@@ -44,6 +44,14 @@ class AuthRepository {
                 username = username
             )
             db.collection("users").document(userId).set(user).await()
+            val defaultShelves = listOf("Reading", "Completed", "Want to Read")
+            defaultShelves.forEach { shelfName ->
+                val shelf = Shelf(
+                    name = shelfName,
+                    id_user = userId
+                )
+                db.collection("shelves").add(shelf).await()
+            }
             Result.success("User registered successfully")
         } catch (e: Exception) {
             Result.failure(e)
@@ -90,6 +98,14 @@ class AuthRepository {
                     profileImageUrl = result.user?.photoUrl.toString() ?: ""
                 )
                 db.collection("users").document(userId).set(user).await()
+                val defaultShelves = listOf("Reading", "Completed", "Want to Read")
+                defaultShelves.forEach { shelfName ->
+                    val shelf = Shelf(
+                        name = shelfName,
+                        id_user = userId
+                    )
+                    db.collection("shelves").add(shelf).await()
+                }
                 Log.d(TAG, "New Google user saved to Firestore")
             }else{
                 Log.d(TAG, "Google user already logged in Firestore")

@@ -186,7 +186,7 @@ fun BookishApp() {
                 bookViewModel = bookViewModel,
                 onBookClick = { book ->
                     selectedBook = book
-                    navController.navigate("bookDetails")
+                    navController.navigate("book_details")
                 },
                 onBackClick = {
                     navController.popBackStack()

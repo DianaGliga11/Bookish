@@ -101,4 +101,6 @@ dependencies {
     implementation(libs.material3)
     implementation(libs.androidx.room3.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.junit.ktx)
+    testImplementation(kotlin("test"))
 }

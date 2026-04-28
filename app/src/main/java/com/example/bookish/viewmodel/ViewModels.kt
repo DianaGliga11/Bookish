@@ -322,7 +322,7 @@ class BookViewModel : ViewModel() {
 
     private val _recommandedBooks = MutableStateFlow<List<Book>>(emptyList())
     val recommandedBooks: StateFlow<List<Book>> = _recommandedBooks.asStateFlow()
-
+    private var hasGeneratedRecommendation = false
     private val conversationHistory = mutableListOf<Content>()
 
     private val _searchQuery = MutableStateFlow("")
@@ -550,39 +550,71 @@ class BookViewModel : ViewModel() {
         if (allBooks.isEmpty()) {
             return
         }
+        if(hasGeneratedRecommendation){
+            return
+        }
+        hasGeneratedRecommendation = true
+
+        val userLikedBookIds = allReviews
+            .filter { it.id_user == user.id_user && it.rating >= 3 }
+            .map { it.id_book }
+
 
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userLickedBookIds = allReviews
-                    .filter { it.id_user == user.id_user && it.rating >= 4 }
-                    .map { it.id_book }
-
-                val lickedTitles = allBooks
-                    .filter { it.id_book in userLickedBookIds }
+                val likedTitles = allBooks
+                    .filter { it.id_book in userLikedBookIds }
                     .joinToString { it.title }
+                    .ifEmpty { "No books rated yet" }
 
                 val catalog = allBooks.joinToString(";") { "${it.title} (ID: ${it.id_book})" }
+
                 val prompt = """
-                    You are a book recommendation assistant for the app 'Bookish'.
-                    User Bio: "${user.bio}"
-                    Books the user licked: $lickedTitles
-                    Available Catalog: $catalog
-                    Based on the user's bio and licked books, select the 3 best books from the Available Catalog.
-                    Return only the IDs of the books, separated by commas. Do not write prose.
-                """.trimIndent()
+                You are a book recommendation assistant for the app 'Bookish'.
+                User Bio: "${user.bio}"
+                Books the user liked: $likedTitles
+                Available Catalog: $catalog
+                Based on the user's bio and liked books (or just bio if no liked books), 
+                select the 3 best books from the Available Catalog.
+                Return only the IDs of the books, separated by commas. Do not write prose.
+            """.trimIndent()
 
                 val generativeModel = GenerativeModel(
-                    modelName = "gemini-2.5-flash",
-                    apiKey = com.example.bookish.BuildConfig.GEMINI_API_KEY,
+                    modelName = "gemini-2.0-flash-lite",
+                    apiKey = com.example.bookish.BuildConfig.GEMINI_API_KEY
                 )
 
-                val response = generativeModel.generateContent(prompt)
-                val rawResponse = response.text ?: ""
-                Log.d("AI_DEBUG:", "$rawResponse")
+                var response: com.google.ai.client.generativeai.type.GenerateContentResponse? = null
+                val retryDelays = listOf(5000L, 15000L, 30000L)
 
-                val recommendedIds = response.text?.split(",")?.map { it.trim() } ?: emptyList()
-                _recommandedBooks.value = allBooks.filter { it.id_book in recommendedIds }
+                for (attempt in 0..2) {
+                    try {
+                        response = generativeModel.generateContent(prompt)
+                        break
+                    } catch (e: Exception) {
+                        val isRetryable = e.message?.contains("high demand") == true ||
+                                e.message?.contains("quota") == true ||
+                                e.message?.contains("503") == true
+                        if (isRetryable && attempt < 2) {
+                            Log.w("AI_DEBUG", "Attempt ${attempt + 1} failed, retrying...")
+                            kotlinx.coroutines.delay(retryDelays[attempt])
+                        } else throw e
+                    }
+                }
+
+                val rawResponse = response?.text ?: ""
+                Log.d("AI_DEBUG", "Recomandări primite: $rawResponse")
+
+                val recommendedIds = rawResponse
+                    .split(",")
+                    .map { it.trim().filter { char -> char.isDigit() } } // Păstrăm doar cifrele
+                    .filter { it.isNotEmpty() }
+
+                _recommandedBooks.value = allBooks.filter { book ->
+                    recommendedIds.contains(book.id_book.toString())
+                }
+
             } catch (e: Exception) {
                 _error.value = "AI Error: ${e.message}"
                 Log.e("AI_DEBUG", "Error generating AI recommendations", e)
@@ -592,6 +624,52 @@ class BookViewModel : ViewModel() {
         }
     }
 
+    fun generateManualRecommendations(user: User, allBooks: List<Book>, userReviews: List<Review>) {
+        if (allBooks.isEmpty()) return
+
+        // 1. Identificăm genurile preferate ale utilizatorului (cele la care a dat review-uri de 4 și 5 stele)
+        val favoriteGenreIds = userReviews
+            .filter { it.rating >= 4 }
+            .mapNotNull { review -> allBooks.find { it.id_book == review.id_book }?.id_genre }
+            .distinct()
+
+        // 2. Extragem cuvinte cheie din BIO pentru a le căuta în descrierile cărților
+        val bioKeywords = user.bio.lowercase()
+            .split(" ", ",", ".")
+            .filter { it.length > 3 } // ignorăm cuvintele scurte (prepoziții)
+
+        // 3. Calculăm un scor pentru fiecare carte din catalog care NU a fost citită încă
+        val readBookIds = userReviews.map { it.id_book }
+
+        val scoredBooks = allBooks
+            .filter { it.id_book !in readBookIds } // Nu recomandăm ce a citit deja
+            .map { book ->
+                var score = 0
+
+                // Bonus pentru gen identic
+                if (book.id_genre in favoriteGenreIds) {
+                    score += 10
+                }
+
+                // Bonus dacă cuvinte din bio se regăsesc în descrierea cărții
+                bioKeywords.forEach { keyword ->
+                    if (book.description.lowercase().contains(keyword)) {
+                        score += 2
+                    }
+                }
+
+                book to score
+            }
+
+        // 4. Sortăm după scor și luăm primele 5
+        val recommendations = scoredBooks
+            .filter { it.second > 0 } // Luăm doar cărțile care au măcar o mică relevanță
+            .sortedByDescending { it.second }
+            .map { it.first }
+            .take(5)
+
+        _recommandedBooks.value = recommendations
+    }
     fun loadAiHistory(userId: String) {
         viewModelScope.launch {
             conversationHistory.clear()
@@ -673,7 +751,6 @@ class BookViewModel : ViewModel() {
             isFromAi = false,
             timestamp = System.currentTimeMillis()
         )
-
         _aiMessages.value = _aiMessages.value + userMsg
 
         viewModelScope.launch {
@@ -683,36 +760,56 @@ class BookViewModel : ViewModel() {
                 id = streamingId,
                 content = "",
                 isFromAi = true,
+                isStreaming = true,
                 timestamp = System.currentTimeMillis() + 1
             )
 
             try {
-                val catalog = _books.value.joinToString("\n") {
-                    "- Titlu: ${it.title}, ID ${it.id_book}"
+                val catalog = _books.value.joinToString("\n") { book ->
+                    val author = _authors.value.find { it.id_author == book.id_author }
+                    buildString {
+                        append("- Titlu: \"${book.title}\", ID: ${book.id_book}")
+                        if (author != null) append(", Autor: ${author.name}")
+                        if (book.description.isNotEmpty()) {
+                            append(", Descriere: ${book.description.take(300)}")
+                        }
+                    }
+                }
+
+                // ── Limitează istoricul la ultimele 10 mesaje ──
+                val maxHistory = 10
+                if (conversationHistory.size > maxHistory) {
+                    val excess = conversationHistory.size - maxHistory
+                    repeat(excess) { conversationHistory.removeAt(0) }
                 }
 
                 val systemPrompt = """
-                    Ești un detectiv de cărți strict limitat la catalogul pus la dispoziție.
-                    
-                    CATALOG DISPONIBIL:
-                    $catalog
-                    
-                    REGULI CRITICE:
-                    1. NU AI VOIE să ghicești nicio carte care NU se află în lista de mai sus.
-                    2. Dacă utilizatorul descrie o carte care nu este în catalogul meu, răspunde: "Din păcate, această carte nu se află în biblioteca mea momentan. Încearcă să descrii o altă carte!"
-                    3. Analizează indiciile (gen, atmosferă) și compară-le DOAR cu elementele din catalog.
-                    4. Când ești sigur, răspunde exact: "Am ghicit! Cred că este: [Titlu] 🎉\nBOOK_ID:[ID]"
-                    5. Dacă sunt mai multe variante posibile din catalog, pune întrebări suplimentare pentru a elimina opțiunile greșite.
-                """.trimIndent()
+                Ești un detectiv de cărți strict limitat la catalogul pus la dispoziție.
+                
+                CATALOG DISPONIBIL:
+                $catalog
+                
+                REGULI CRITICE:
+                1. NU AI VOIE să ghicești nicio carte care NU se află în lista de mai sus.
+                2. Dacă utilizatorul descrie o carte care nu este în catalogul meu, răspunde: 
+                   "Din păcate, această carte nu se află în biblioteca mea momentan. 
+                   Încearcă să descrii o altă carte!"
+                3. Analizează indiciile (gen, atmosferă) și compară-le DOAR cu elementele din catalog.
+                4. Când ești sigur, răspunde exact: 
+                   "Am ghicit! Cred că este: [Titlu] 🎉\nBOOK_ID:[ID]"
+                5. Dacă sunt mai multe variante posibile din catalog, pune întrebări 
+                   suplimentare pentru a elimina opțiunile greșite.
+            """.trimIndent()
 
                 val generativeModel = GenerativeModel(
-                    modelName = "gemini-2.5-flash",
+                    modelName = "gemini-2.5-flash-lite",
                     apiKey = com.example.bookish.BuildConfig.GEMINI_API_KEY,
                     systemInstruction = content { text(systemPrompt) }
                 )
 
                 val chat = generativeModel.startChat(history = conversationHistory)
 
+                // ── Streaming ──
                 var fullResponse = ""
                 chat.sendMessageStream(userMessage).collect { chunk ->
                     chunk.text?.let { chunkText ->
@@ -728,18 +825,22 @@ class BookViewModel : ViewModel() {
                     }
                 }
 
+                // ── Streaming terminat ──
                 val finalDisplayText = fullResponse
-                    .replace(Regex("BOOK+ID:.*"), "")
+                    .replace(Regex("BOOK_ID:.*"), "")
                     .trim()
+
                 _aiMessages.value = _aiMessages.value.map { msg ->
                     if (msg.id == streamingId) {
-                        msg.copy(content = finalDisplayText, isStreaming = true)
+                        msg.copy(content = finalDisplayText, isStreaming = false)  // ← false
                     } else msg
                 }
 
+                // ── Actualizează istoricul Gemini ──
                 conversationHistory.add(content(role = "user") { text(userMessage) })
                 conversationHistory.add(content(role = "model") { text(fullResponse) })
 
+                // ── Salvează în Firestore ──
                 aiChatRepository.saveInteractions(
                     ChatInteractions(
                         id_user = userId,
@@ -749,16 +850,19 @@ class BookViewModel : ViewModel() {
                     )
                 )
 
+                // ── Verifică dacă a ghicit cartea ──
                 if (fullResponse.contains("BOOK_ID:")) {
                     val bookId = fullResponse
                         .substringAfter("BOOK_ID:")
                         .trim()
-                        .split("\n")[0]
+                        .lines()
+                        .first()
                         .trim()
-                    val foundBook = _books.value.find { it.id_book == bookId }
-                    _guessedBook.value = foundBook
+                    _guessedBook.value = _books.value.find { it.id_book == bookId }
                 }
+
                 Log.d("AI_DEBUG", "Full response: $fullResponse")
+
             } catch (e: Exception) {
                 _aiMessages.value = _aiMessages.value.map { msg ->
                     if (msg.id == streamingId) {
@@ -774,7 +878,6 @@ class BookViewModel : ViewModel() {
             }
         }
     }
-
     fun resetAiGame(userId: String) {
         startNewAiGame(userId)
     }
