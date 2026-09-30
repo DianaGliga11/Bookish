@@ -99,7 +99,7 @@ I was responsible for the complete development process:
 
 ### Rating and Review System
 
-![Ratings, Reviews, Comments](screenshots/review-system.png)
+![Ratings, Reviews, Comments](screenshots/rating-system.png)
 
 *The rating and review system allows users to rate books from one to five stars and share their opinions through written reviews.*
 
