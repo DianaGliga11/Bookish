@@ -77,13 +77,15 @@ I was responsible for the complete development process:
 
 ![Bookish Welcome Screen](screenshots/welcome-screen.png)
 
-*The initial screen of the Bookish application, introducing the app's concept and encouraging users to start their reading journey.*
+*The initial screen of the Bookish application, introducing the app's concept 
+and encouraging users to start their reading journey.*
 
 ### Login Screen
 
 ![Authentication](screenshots/login-screen.png)
 
-*The authentication screen, allowing users to sign in using their username or email and password, as well as Google authentication.*
+*The authentication screen, allowing users to sign in using their username
+or email and password, as well as Google authentication.*
 
 ### Personal Library
 
@@ -95,25 +97,29 @@ I was responsible for the complete development process:
 
 ![Finding new books](screenshots/search-screen.png)
 
-*The search functionality allows users to quickly find books based on their title, author, or genre.*
+*The search functionality allows users to quickly find books based on 
+their title, author, or genre.*
 
 ### Rating and Review System
 
 ![Ratings, Reviews, Comments](screenshots/rating-system.png)
 
-*The rating and review system allows users to rate books from one to five stars and share their opinions through written reviews.*
+*The rating and review system allows users to rate books from one to five stars 
+and share their opinions through written reviews.*
 
 ### Friends and Book Clubs
 
 ![Chat with other readers](screenshots/friends-screen.png)
 
-*The social component of Bookish, supporting friendships, private messaging, book recommendations, and book club interactions.*
+*The social component of Bookish, supporting friendships, private messaging, 
+book recommendations, and book club interactions.*
 
 ### Chatbot Detective
 
 ![AI Book Detective](screenshots/chatbot-guess.png)
 
-*The AI-powered Book Detective uses the Gemini LLM to identify books based on descriptions and clues provided by the user.*
+*The AI-powered Book Detective uses the Gemini LLM to identify books based on 
+descriptions and clues provided by the user.*
 
 ## Features
 
@@ -188,6 +194,7 @@ The Home screen provides several categories of books, including:
     users;
 -   **Recommended For You** -- books selected using user information and
     reading preferences.
+-   **Book Clubs** -- book clubs available, using user information and reading preferences
 
 The recommendation logic considers information such as the user's bio
 and highly rated reviews.
