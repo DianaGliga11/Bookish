@@ -85,12 +85,35 @@ I was responsible for the complete development process:
 
 *The authentication screen, allowing users to sign in using their username or email and password, as well as Google authentication.*
 
-### Book Details and Reviews
+### Personal Library
 
-![Book Details and Reviews](screenshots/book-details-reviews.png)
+![Progress, Tracking and Challenges](screenshots/personal-library-screen.png)
 
-*Book details include actions for adding a book to the personal library,
-writing a review, and viewing ratings and reviews from other users.*
+*The personal library where users can organize books into shelves, create reading challenges, and track their reading progress.*
+
+### Search Screen
+
+![Finding new books](screenshots/search-screen.png)
+
+*The search functionality allows users to quickly find books based on their title, author, or genre.*
+
+### Rating and Review System
+
+![Ratings, Reviews, Comments](screenshots/review-system.png)
+
+*The rating and review system allows users to rate books from one to five stars and share their opinions through written reviews.*
+
+### Friends and Book Clubs
+
+![Chat with other readers](screenshots/friends-screen.png)
+
+*The social component of Bookish, supporting friendships, private messaging, book recommendations, and book club interactions.*
+
+### Chatbot Detective
+
+![AI Book Detective](screenshots/chatbot-guess.png)
+
+*The AI-powered Book Detective uses the Gemini LLM to identify books based on descriptions and clues provided by the user.*
 
 ## Features
 
