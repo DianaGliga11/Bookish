@@ -77,8 +77,13 @@ I was responsible for the complete development process:
 
 ![Bookish Welcome Screen](screenshots/welcome-screen.png)
 
-*The initial Bookish screen introduces the application and provides
-access to the authentication flow.*
+*The initial screen of the Bookish application, introducing the app's concept and encouraging users to start their reading journey.*
+
+### Login Screen
+
+![Authentication](screenshots/login-screen.png)
+
+*The authentication screen, allowing users to sign in using their username or email and password, as well as Google authentication.*
 
 ### Book Details and Reviews
 
