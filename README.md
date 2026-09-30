@@ -294,6 +294,8 @@ management to remain organized and easier to maintain.
 -   **Build environment:** Android Studio
 -   **Version control:** Git / GitHub
 
+![Architecture and Technologies](structure.png)
+
 ## Firebase Data
 
 Cloud Firestore is used as the main NoSQL database and stores
